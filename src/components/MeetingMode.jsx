@@ -9,7 +9,8 @@ import {
   Monitor,
   Calculator,
   ListTodo,
-  ShieldAlert
+  ShieldAlert,
+  ClipboardList
 } from "lucide-react";
 
 const markerTypes = [
@@ -19,6 +20,7 @@ const markerTypes = [
   { key: "a_verifier", label: "À vérifier", icon: Flag },
   { key: "regle_calcul", label: "Règle de calcul", icon: Calculator },
   { key: "ecran", label: "Écran / fonctionnalité", icon: Monitor },
+  { key: "need", label: "Besoin utilisateur", icon: ClipboardList },
   { key: "blocage", label: "Blocage", icon: AlertTriangle },
   { key: "point_sensible", label: "Point sensible", icon: ShieldAlert }
 ];

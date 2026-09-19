@@ -1,6 +1,6 @@
 import { useState } from "react";
 import MeetingModePanel from "./MeetingModePanel.jsx";
-import { localApi } from "../../lib/local-api.js";
+import { localApi, saveMeetingReport, validateMeeting } from "../../lib/local-api.js";
 
 function formatDate(value) {
   if (!value) return "Date à confirmer";
@@ -11,8 +11,10 @@ function formatDate(value) {
 
 function MeetingJournalCard({ meeting, onChanged }) {
   const [report, setReport] = useState(null);
+  const [draftReport, setDraftReport] = useState("");
   const [reportType, setReportType] = useState("");
   const [busy, setBusy] = useState(false);
+  const [savingReport, setSavingReport] = useState(false);
   const [notice, setNotice] = useState("");
 
   async function toggleReport() {
@@ -32,6 +34,7 @@ function MeetingJournalCard({ meeting, onChanged }) {
         })
       });
       setReport(payload.content || "");
+      setDraftReport(payload.content || "");
       setReportType(payload.reportType || "exporte");
     } catch (error) {
       setNotice(error.message || "Impossible de lire le journal.");
@@ -40,20 +43,46 @@ function MeetingJournalCard({ meeting, onChanged }) {
     }
   }
 
+  async function saveDraft() {
+    setSavingReport(true);
+    setNotice("");
+    try {
+      await saveMeetingReport({
+        projectSlug: meeting.projectSlug,
+        meetingDirName: meeting.meetingDirName,
+        content: draftReport
+      });
+      setReport(draftReport);
+      setNotice("Corrections enregistrées dans la version de travail.");
+      onChanged?.();
+    } catch (error) {
+      setNotice(error.message || "Impossible d’enregistrer les corrections.");
+    } finally {
+      setSavingReport(false);
+    }
+  }
+
   async function validateReport() {
     setBusy(true);
     setNotice("");
     try {
-      await localApi("/api/meetings/validate", {
-        method: "POST",
-        body: JSON.stringify({
+      if (report !== null && report !== draftReport) {
+        await saveMeetingReport({
           projectSlug: meeting.projectSlug,
-          meetingDirName: meeting.meetingDirName
+          meetingDirName: meeting.meetingDirName,
+          content: draftReport
         })
+        setReport(draftReport);
+      }
+      await validateMeeting({
+        projectSlug: meeting.projectSlug,
+        meetingDirName: meeting.meetingDirName
       });
       setNotice("Journal validé dans la mémoire locale.");
       onChanged?.();
-      await toggleReport();
+      setReport(null);
+      setDraftReport("");
+      setReportType("");
     } catch (error) {
       setNotice(error.message || "Impossible de valider le journal.");
     } finally {
@@ -85,7 +114,24 @@ function MeetingJournalCard({ meeting, onChanged }) {
       {report !== null ? (
         <div className="meeting-report">
           <small>Version {reportType === "valide" ? "validée" : "exportée"}</small>
-          <pre>{report}</pre>
+          {reportType === "valide" ? <pre>{report}</pre> : (
+            <>
+              <textarea
+                aria-label="Journal de bord modifiable"
+                value={draftReport}
+                onChange={(event) => setDraftReport(event.target.value)}
+                rows={18}
+              />
+              {draftReport !== report ? (
+                <div className="meeting-report-actions">
+                  <button type="button" onClick={saveDraft} disabled={savingReport || busy}>
+                    {savingReport ? "Enregistrement…" : "Enregistrer les corrections"}
+                  </button>
+                  <span>La validation protègera cette version.</span>
+                </div>
+              ) : null}
+            </>
+          )}
         </div>
       ) : null}
     </article>

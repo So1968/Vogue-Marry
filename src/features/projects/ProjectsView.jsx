@@ -1,12 +1,42 @@
 import { useMemo, useState } from "react";
+import { createProject } from "../../lib/local-api.js";
 import { makeProjectViewModel } from "./project-utils.js";
 
-export default function ProjectsView({ projects, meetings, loading, error, onOpenProject }) {
+export default function ProjectsView({ projects, meetings, loading, error, onOpenProject, onSaved }) {
   const [mode, setMode] = useState("cards");
+  const [projectName, setProjectName] = useState("");
+  const [projectDescription, setProjectDescription] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [formError, setFormError] = useState("");
+  const [formNotice, setFormNotice] = useState("");
   const viewModels = useMemo(
     () => projects.map((project, index) => makeProjectViewModel(project, meetings, index)),
     [projects, meetings]
   );
+
+  async function handleCreateProject(event) {
+    event.preventDefault();
+    const name = projectName.trim();
+    if (!name) {
+      setFormError("Donnez un nom à l’île avant de l’enregistrer.");
+      return;
+    }
+
+    setCreating(true);
+    setFormError("");
+    setFormNotice("");
+    try {
+      await createProject({ name, description: projectDescription.trim() });
+      await onSaved?.();
+      setProjectName("");
+      setProjectDescription("");
+      setFormNotice("Île créée dans la mémoire locale.");
+    } catch (requestError) {
+      setFormError(requestError.message || "Impossible de créer cette île.");
+    } finally {
+      setCreating(false);
+    }
+  }
 
   return (
     <section className="islands-view">
@@ -18,12 +48,42 @@ export default function ProjectsView({ projects, meetings, loading, error, onOpe
         </div>
       </div>
 
+      <form className="project-create-form" onSubmit={handleCreateProject}>
+        <div>
+          <p className="data-kicker">Nouvelle île</p>
+          <h3>Commencer une mémoire projet</h3>
+          <p>Le nom et le contexte restent rattachés aux escales, journaux et documents.</p>
+        </div>
+        <label>
+          Nom du projet
+          <input
+            value={projectName}
+            onChange={(event) => setProjectName(event.target.value)}
+            placeholder="Ex. Refonte du parcours client"
+            maxLength={160}
+          />
+        </label>
+        <label>
+          Contexte de reprise <span>(facultatif)</span>
+          <textarea
+            value={projectDescription}
+            onChange={(event) => setProjectDescription(event.target.value)}
+            placeholder="Objectif, périmètre ou prochain cap…"
+            maxLength={2000}
+            rows={2}
+          />
+        </label>
+        <button type="submit" disabled={creating}>{creating ? "Création…" : "Créer l’île"}</button>
+        {formError ? <p className="form-message error">{formError}</p> : null}
+        {formNotice ? <p className="form-message">{formNotice}</p> : null}
+      </form>
+
       {loading ? <p className="data-state">Lecture des projets locaux…</p> : null}
       {error ? <p className="data-state error">{error}</p> : null}
       {!loading && !error && !viewModels.length ? (
         <div className="data-empty">
           <h3>Aucune île enregistrée</h3>
-          <p>Créez un projet depuis l’API locale pour le faire apparaître ici.</p>
+          <p>Créez la première île ci-dessus pour commencer à conserver le fil du projet.</p>
         </div>
       ) : null}
 

@@ -148,7 +148,13 @@ function createFileVersion(filePath, reason = "version") {
   ensureDir(versionsDir);
 
   const parsed = path.parse(filePath);
-  const versionPath = path.join(versionsDir, `${timestampForFile()}_${parsed.name}_${reason}${parsed.ext}`);
+  const baseVersionName = `${timestampForFile()}_${parsed.name}_${reason}`;
+  let versionPath = path.join(versionsDir, `${baseVersionName}${parsed.ext}`);
+  let duplicateIndex = 2;
+  while (fs.existsSync(versionPath)) {
+    versionPath = path.join(versionsDir, `${baseVersionName}_${duplicateIndex}${parsed.ext}`);
+    duplicateIndex += 1;
+  }
   fs.copyFileSync(filePath, versionPath);
   return versionPath;
 }
@@ -245,12 +251,22 @@ function analyseWaterSevenDocument(file) {
   };
 }
 
-function createProjectStructure(projectName) {
+function createProjectStructure(projectName, projectDescription = "") {
   const slug = slugify(projectName);
   if (!slug) throw new Error("Nom de projet invalide.");
 
   const baseDir = safePathInside(PROJECTS_ROOT, slug);
   ensureDir(baseDir);
+  writeFileIfMissing(
+    path.join(baseDir, "projet.json"),
+    JSON.stringify({
+      version: 1,
+      slug,
+      name: String(projectName).trim(),
+      description: String(projectDescription || "").trim().slice(0, 2000),
+      createdAt: new Date().toISOString()
+    }, null, 2)
+  );
 
   const folders = [
     "00_carte_ile",
@@ -280,7 +296,7 @@ Structure :
 - 02_caps_valides_decisions : décisions consolidées
 - 03_manoeuvres_actions : plan d'actions
 - 04_regles_methodes : règles, méthodes et arbitrages
-- 05_ecrans_parcours : écrans et parcours utilisateur
+- 05_ecrans_parcours : écrans, parcours et besoins identifiés
 - 06_donnees_imports_interfaces : sources, imports, interfaces, mappings
 - 07_questions_blocages : questions ouvertes et blocages
 - 08_coffre_documents_sources : documents d'origine, pièces et preuves
@@ -319,12 +335,24 @@ Structure :
   writeFileIfMissing(path.join(baseDir, "03_manoeuvres_actions", "manoeuvres_actions.md"), `# Manœuvres / actions — ${projectName}\n\n| Action | Responsable | Échéance | Statut | Source |\n|---|---|---|---|---|\n`);
   writeFileIfMissing(path.join(baseDir, "04_regles_methodes", "regles_methodes.md"), `# Règles / méthodes — ${projectName}\n\n| Règle / méthode | Statut | Source | Points ouverts |\n|---|---|---|---|\n`);
   writeFileIfMissing(path.join(baseDir, "05_ecrans_parcours", "ecrans_parcours.md"), `# Écrans / parcours — ${projectName}\n\n| Écran / parcours | Objectif | Règles associées | Points ouverts |\n|---|---|---|---|\n`);
+  writeFileIfMissing(path.join(baseDir, "05_ecrans_parcours", "besoins.md"), `# Besoins identifiés — ${projectName}\n\n| Besoin | Contexte / preuve | Priorité | Statut | Source |\n|---|---|---|---|---|\n`);
   writeFileIfMissing(path.join(baseDir, "06_donnees_imports_interfaces", "donnees_imports_interfaces.md"), `# Données / imports / interfaces — ${projectName}\n\n| Élément | Source | Usage | Points ouverts |\n|---|---|---|---|\n`);
   writeFileIfMissing(path.join(baseDir, "07_questions_blocages", "questions_blocages.md"), `# Questions ouvertes / blocages — ${projectName}\n\n| Date | Sujet | Statut | Responsable | Source |\n|---|---|---|---|---|\n`);
   writeFileIfMissing(path.join(baseDir, "10_log_pose", "log_pose.md"), `# Log Pose — ${projectName}\n\n## Ce qu’il faut retenir\n\n## Dernier cap validé\n\n## Manœuvres prioritaires\n\n## Questions ouvertes\n\n## Documents à retrouver\n\n## Prochaine direction utile\n`);
   syncLogPose(slug);
 
-  return { name: projectName, slug };
+  return readProjectRecord(slug);
+}
+
+function readProjectRecord(projectSlug) {
+  const projectDir = safePathInside(PROJECTS_ROOT, projectSlug);
+  const metadata = readJsonIfExists(path.join(projectDir, "projet.json"));
+  return {
+    slug: projectSlug,
+    name: metadata?.name || projectSlug.replaceAll("_", " "),
+    description: metadata?.description || "",
+    createdAt: metadata?.createdAt || null
+  };
 }
 
 function readJsonIfExists(filePath) {
@@ -368,12 +396,20 @@ const KNOWLEDGE_CONFIG = {
     fileName: "caps_valides.json",
     markdownName: "caps_valides.md",
     textField: "decision"
+  },
+  need: {
+    label: "Besoins",
+    folder: "05_ecrans_parcours",
+    fileName: "besoins.json",
+    markdownName: "besoins.md",
+    textField: "need"
   }
 };
 
 const KNOWLEDGE_HEADINGS = {
   action: ["manœuvres / actions à faire", "manoeuvres / actions à faire", "actions à mener"],
-  decision: ["caps validés / décisions prises", "caps valides / decisions prises", "décisions actées", "repères validés"]
+  decision: ["caps validés / décisions prises", "caps valides / decisions prises", "décisions actées", "repères validés"],
+  need: ["écrans / fonctionnalités concernés", "ecrans / fonctionnalites concernes", "besoins identifiés", "besoins identifies", "besoins"]
 };
 
 function normalizeKnowledgeText(value) {
@@ -434,7 +470,7 @@ function parseKnowledgeSection(lines, kind) {
   return meaningfulLines
     .map((line) => line.replace(/^[-*]\s+/u, "").replace(/^\d+[.)]\s+/u, "").trim())
     .filter(Boolean)
-    .map((text) => ({ [kind === "action" ? "action" : "decision"]: text }));
+    .map((text) => ({ [kind === "action" ? "action" : kind === "decision" ? "decision" : "need"]: text }));
 }
 
 function pickKnowledgeValue(row, names) {
@@ -458,7 +494,9 @@ function makeKnowledgeItem(kind, projectSlug, meetingDirName, data, row, index, 
   const config = KNOWLEDGE_CONFIG[kind];
   const text = pickKnowledgeValue(row, kind === "action"
     ? ["action", "manœuvre / action", "manoeuvre / action", "manœuvre"]
-    : ["cap validé / décision", "cap valide / decision", "décision", "decision", "repère validé"]);
+    : kind === "decision"
+      ? ["cap validé / décision", "cap valide / decision", "décision", "decision", "repère validé"]
+      : ["need", "besoin", "besoin utilisateur", "écran / fonctionnalité", "ecran / fonctionnalite", "fonctionnalité", "fonctionnalite"]);
   const meetingDate = data?.meetingDate || meetingDirName.slice(0, 10);
   const item = {
     id: knowledgeItemId(kind, projectSlug, meetingDirName, index, text),
@@ -480,9 +518,14 @@ function makeKnowledgeItem(kind, projectSlug, meetingDirName, data, row, index, 
     item.statut = pickKnowledgeValue(row, ["statut", "status"]) || "À préciser";
     item.decisionId = pickKnowledgeValue(row, ["décision liée", "decision liee"]);
     item.documentId = pickKnowledgeValue(row, ["document lié", "document lie"]);
-  } else {
+  } else if (kind === "decision") {
     item.decision = text;
     item.impact = pickKnowledgeValue(row, ["impact", "conséquence", "consequence"]);
+    item.statut = pickKnowledgeValue(row, ["statut", "status"]) || "À préciser";
+  } else {
+    item.need = text;
+    item.context = pickKnowledgeValue(row, ["contexte / preuve", "contexte", "preuve", "objectif"]);
+    item.priority = pickKnowledgeValue(row, ["priorité", "priorite"]) || "À préciser";
     item.statut = pickKnowledgeValue(row, ["statut", "status"]) || "À préciser";
   }
 
@@ -494,10 +537,10 @@ function meetingMarkerRows(data) {
     const markers = JSON.parse(String(data?.rawNotes || ""));
     if (!Array.isArray(markers)) return [];
     return markers
-      .filter((marker) => marker?.type === "action" || marker?.type === "decision")
+      .filter((marker) => marker?.type === "action" || marker?.type === "decision" || marker?.type === "need")
       .map((marker) => ({
         type: marker.type,
-        text: marker.text || marker.content || marker.note || `${marker.label || (marker.type === "action" ? "Action" : "Décision")} repérée à ${marker.timeLabel || "un moment de l’escale"} — à préciser`
+        text: marker.text || marker.content || marker.note || `${marker.label || (marker.type === "action" ? "Action" : marker.type === "decision" ? "Décision" : "Besoin")} repéré à ${marker.timeLabel || "un moment de l’escale"} — à préciser`
       }));
   } catch {
     return [];
@@ -512,7 +555,7 @@ function extractKnowledgeFromMeeting(projectSlug, meetingEntry, data, content, k
   const markerOffset = items.length;
   markerRows.forEach((marker, index) => {
     const item = makeKnowledgeItem(kind, projectSlug, meetingEntry.name, data, {
-      [kind === "action" ? "action" : "decision"]: marker.text
+      [kind === "action" ? "action" : kind === "decision" ? "decision" : "need"]: marker.text
     }, markerOffset + index, "marqueur");
     const normalizedText = normalizeKnowledgeText(item[KNOWLEDGE_CONFIG[kind].textField]);
     if (!seenTexts.has(normalizedText)) {
@@ -548,11 +591,18 @@ function normalizeStoredKnowledgeEntry(projectSlug, kind, entry, index) {
       decisionId: entry?.decisionId || pickKnowledgeValue(entry, ["décision liée", "decision liee"]),
       documentId: entry?.documentId || pickKnowledgeValue(entry, ["document lié", "document lie"])
     }
-    : {
+    : kind === "decision"
+      ? {
       decision: entry?.decision || pickKnowledgeValue(entry, ["cap validé / décision", "cap valide / decision", "décision", "decision"]),
       date: entry?.date || pickKnowledgeValue(entry, ["date"]),
       statut: entry?.statut || pickKnowledgeValue(entry, ["statut", "status"]),
       impact: entry?.impact || pickKnowledgeValue(entry, ["impact"])
+    }
+      : {
+      need: entry?.need || pickKnowledgeValue(entry, ["besoin", "besoin utilisateur", "écran / fonctionnalité", "ecran / fonctionnalite"]),
+      context: entry?.context || pickKnowledgeValue(entry, ["contexte / preuve", "contexte", "preuve"]),
+      priority: entry?.priority || pickKnowledgeValue(entry, ["priorité", "priorite"]),
+      statut: entry?.statut || pickKnowledgeValue(entry, ["statut", "status"])
     };
   const text = String(mapped[config.textField] || "").trim();
   return {
@@ -606,13 +656,21 @@ function writeKnowledgeEntries(projectSlug, kind, entries) {
       "|---|---|---|---|---|---|---|---|",
       ...entries.map((entry) => `| ${knowledgeMarkdownValue(entry.action)} | ${knowledgeMarkdownValue(entry.responsable)} | ${knowledgeMarkdownValue(entry.echeance)} | ${knowledgeMarkdownValue(entry.statut)} | ${knowledgeMarkdownValue(entry.source)} | ${knowledgeMarkdownValue(entry.projectName)} | ${knowledgeMarkdownValue(entry.decisionId)} | ${knowledgeMarkdownValue(entry.documentId)} |`)
     ]
-    : [
+    : kind === "decision"
+      ? [
       `# Caps validés / décisions — ${projectName}`,
       "",
       "| Date | Cap validé / décision | Statut | Source | Impact | Île |",
       "|---|---|---|---|---|---|",
       ...entries.map((entry) => `| ${knowledgeMarkdownValue(entry.date)} | ${knowledgeMarkdownValue(entry.decision)} | ${knowledgeMarkdownValue(entry.statut)} | ${knowledgeMarkdownValue(entry.source)} | ${knowledgeMarkdownValue(entry.impact)} | ${knowledgeMarkdownValue(entry.projectName)} |`)
-    ];
+    ]
+      : [
+        `# Besoins identifiés — ${projectName}`,
+        "",
+        "| Besoin | Contexte / preuve | Priorité | Statut | Source | Île |",
+        "|---|---|---|---|---|---|",
+        ...entries.map((entry) => `| ${knowledgeMarkdownValue(entry.need)} | ${knowledgeMarkdownValue(entry.context)} | ${knowledgeMarkdownValue(entry.priority)} | ${knowledgeMarkdownValue(entry.statut)} | ${knowledgeMarkdownValue(entry.source)} | ${knowledgeMarkdownValue(entry.projectName)} |`)
+      ];
   fs.writeFileSync(path.join(directory, config.markdownName), `${lines.join("\n")}\n`, "utf8");
 }
 
@@ -726,6 +784,7 @@ function buildLogPose(projectSlug, manual = readLogPoseManual(projectSlug)) {
   const meetings = listProjectMeetings(projectSlug);
   const { accepted: decisions, pending: pendingDecisions } = knowledgeReviewCounts(projectSlug, "decision");
   const { accepted: actions, pending: pendingActions } = knowledgeReviewCounts(projectSlug, "action");
+  const { accepted: needs, pending: pendingNeeds } = knowledgeReviewCounts(projectSlug, "need");
   const orderedDecisions = sortKnowledgeByDate(decisions);
   const latestDecision = orderedDecisions[0] || null;
   const priorityActions = actions
@@ -735,14 +794,21 @@ function buildLogPose(projectSlug, manual = readLogPoseManual(projectSlug)) {
       return statusRank(a.statut) - statusRank(b.statut) || String(a.date || "").localeCompare(String(b.date || ""));
     })
     .slice(0, 5);
+  const priorityNeeds = needs
+    .filter((item) => !isClosedKnowledgeStatus(item.statut))
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
+    .slice(0, 5);
   const latestMeeting = meetings[0] || null;
   const projectName = latestDecision?.projectName
     || priorityActions[0]?.projectName
-    || projectSlug.replaceAll("_", " ");
+    || priorityNeeds[0]?.projectName
+    || readProjectRecord(projectSlug).name;
   const fallbackRemember = latestDecision?.decision
+    || priorityNeeds[0]?.need
     || (latestMeeting ? `Dernière escale : ${latestMeeting.title}` : "Aucun repère validé pour le moment.");
   const fallbackDirection = priorityActions[0]?.action
-    || (pendingActions.length || pendingDecisions.length
+    || (priorityNeeds[0] ? `Cadrer le besoin : ${priorityNeeds[0].need}` : "")
+    || (pendingActions.length || pendingDecisions.length || pendingNeeds.length
       ? "Relire les propositions en attente de validation."
       : latestMeeting
         ? "Relire la dernière escale et poursuivre le fil."
@@ -759,13 +825,15 @@ function buildLogPose(projectSlug, manual = readLogPoseManual(projectSlug)) {
     lastMeeting: latestMeeting,
     lastDecision: latestDecision,
     priorityActions,
+    priorityNeeds,
     openQuestions: manual.openQuestions,
     documentsToFind: manual.documentsToFind,
     nextDirection: manual.nextDirection || fallbackDirection,
     pendingReview: {
       actions: pendingActions.length,
       decisions: pendingDecisions.length,
-      total: pendingActions.length + pendingDecisions.length
+      needs: pendingNeeds.length,
+      total: pendingActions.length + pendingDecisions.length + pendingNeeds.length
     }
   };
 }
@@ -790,6 +858,9 @@ function writeLogPose(projectSlug, snapshot, manual) {
   const decisionLine = snapshot.lastDecision
     ? `- ${knowledgeMarkdownValue(snapshot.lastDecision.decision)} (${knowledgeMarkdownValue(snapshot.lastDecision.statut || "À préciser")})`
     : "- Aucun cap validé pour le moment.";
+  const needLines = snapshot.priorityNeeds?.length
+    ? snapshot.priorityNeeds.map((item) => `- [${knowledgeMarkdownValue(item.priority || "À préciser")}] ${knowledgeMarkdownValue(item.need)}${item.context ? ` — ${knowledgeMarkdownValue(item.context)}` : ""}`)
+    : ["- Aucun besoin validé pour le moment."];
   const lines = [
     `# Log Pose — ${knowledgeMarkdownValue(snapshot.projectName)}`,
     "",
@@ -807,6 +878,10 @@ function writeLogPose(projectSlug, snapshot, manual) {
     "",
     ...actionLines,
     "",
+    "## Besoins à cadrer",
+    "",
+    ...needLines,
+    "",
     "## Questions ouvertes",
     "",
     ...logPoseMarkdownList(normalizedManual.openQuestions, "Aucune question ouverte enregistrée."),
@@ -821,7 +896,7 @@ function writeLogPose(projectSlug, snapshot, manual) {
     "",
     "## État de validation",
     "",
-    `- ${snapshot.pendingReview.total} élément${snapshot.pendingReview.total > 1 ? "s" : ""} en attente de validation (${snapshot.pendingReview.actions} manœuvre${snapshot.pendingReview.actions > 1 ? "s" : ""}, ${snapshot.pendingReview.decisions} cap${snapshot.pendingReview.decisions > 1 ? "s" : ""}).`
+    `- ${snapshot.pendingReview.total} élément${snapshot.pendingReview.total > 1 ? "s" : ""} en attente de validation (${snapshot.pendingReview.actions} manœuvre${snapshot.pendingReview.actions > 1 ? "s" : ""}, ${snapshot.pendingReview.decisions} cap${snapshot.pendingReview.decisions > 1 ? "s" : ""}, ${snapshot.pendingReview.needs || 0} besoin${(snapshot.pendingReview.needs || 0) > 1 ? "s" : ""}).`
   ];
   fs.writeFileSync(path.join(directory, "log_pose.md"), `${lines.join("\n")}\n`, "utf8");
   return payload;
@@ -845,11 +920,15 @@ function buildGlobalLogPose(projectSlugs) {
   const priorityActions = projectSnapshots
     .flatMap((snapshot) => snapshot.priorityActions.map((item) => ({ ...item, projectName: snapshot.projectName })))
     .slice(0, 5);
+  const priorityNeeds = projectSnapshots
+    .flatMap((snapshot) => (snapshot.priorityNeeds || []).map((item) => ({ ...item, projectName: snapshot.projectName })))
+    .slice(0, 5);
   const pendingReview = projectSnapshots.reduce((total, snapshot) => ({
     actions: total.actions + snapshot.pendingReview.actions,
     decisions: total.decisions + snapshot.pendingReview.decisions,
+    needs: total.needs + (snapshot.pendingReview.needs || 0),
     total: total.total + snapshot.pendingReview.total
-  }), { actions: 0, decisions: 0, total: 0 });
+  }), { actions: 0, decisions: 0, needs: 0, total: 0 });
 
   return {
     version: 1,
@@ -858,13 +937,14 @@ function buildGlobalLogPose(projectSlugs) {
     projectName: "Mémoire globale",
     position: projectSlugs.length ? `${projectSlugs.length} île${projectSlugs.length > 1 ? "s" : ""} suivie${projectSlugs.length > 1 ? "s" : ""}` : "Aucune île enregistrée",
     updatedAt: new Date().toISOString(),
-    whatToRemember: decisions[0]?.decision || (meetings[0] ? `Dernière escale : ${meetings[0].title}` : "Aucun repère validé pour le moment."),
+    whatToRemember: decisions[0]?.decision || priorityNeeds[0]?.need || (meetings[0] ? `Dernière escale : ${meetings[0].title}` : "Aucun repère validé pour le moment."),
     lastMeeting: meetings[0] || null,
     lastDecision: decisions[0] || null,
     priorityActions,
+    priorityNeeds,
     openQuestions: [],
     documentsToFind: [],
-    nextDirection: priorityActions[0]?.action || (pendingReview.total ? "Relire les propositions en attente de validation." : "Choisir une île pour reprendre le fil."),
+    nextDirection: priorityActions[0]?.action || (priorityNeeds[0] ? `Cadrer le besoin : ${priorityNeeds[0].need}` : null) || (pendingReview.total ? "Relire les propositions en attente de validation." : "Choisir une île pour reprendre le fil."),
     pendingReview
   };
 }
@@ -1137,10 +1217,7 @@ app.get("/api/projects", (req, res) => {
   const projects = fs
     .readdirSync(PROJECTS_ROOT, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
-    .map((entry) => ({
-      slug: entry.name,
-      name: entry.name.replaceAll("_", " ")
-    }))
+    .map((entry) => readProjectRecord(entry.name))
     .sort((a, b) => a.slug.localeCompare(b.slug));
 
   res.json({ projects });
@@ -1148,7 +1225,7 @@ app.get("/api/projects", (req, res) => {
 
 app.post("/api/projects", (req, res) => {
   try {
-    const project = createProjectStructure(req.body.name);
+    const project = createProjectStructure(req.body.name, req.body.description);
     res.status(201).json({ project });
   } catch (error) {
     res.status(400).json({ error: error.message || "Erreur pendant la création du projet." });
@@ -1178,7 +1255,8 @@ app.post("/api/meetings/export", (req, res) => {
     if (!projectSlug) throw new Error("Projet manquant.");
 
     const projectDir = safePathInside(PROJECTS_ROOT, projectSlug);
-    ensureDir(projectDir);
+    if (!fs.existsSync(projectDir)) throw new Error("Île/projet introuvable. Créez d’abord le projet.");
+    const project = readProjectRecord(projectSlug);
 
     const meetingsDir = path.join(projectDir, "01_escales_reunions");
     ensureDir(meetingsDir);
@@ -1186,8 +1264,15 @@ app.post("/api/meetings/export", (req, res) => {
     const date = meetingDate || new Date().toISOString().slice(0, 10);
     const typeSlug = slugify(meetingType || "escale").slice(0, 80) || "escale";
     const titleSlug = slugify(title || "sans_titre").slice(0, 80) || "sans_titre";
-    const meetingDirName = `${date}_${typeSlug}_${titleSlug}`;
-    const meetingDir = path.join(meetingsDir, meetingDirName);
+    const baseMeetingDirName = `${date}_${typeSlug}_${titleSlug}`;
+    let meetingDirName = baseMeetingDirName;
+    let meetingDir = path.join(meetingsDir, meetingDirName);
+    let duplicateIndex = 2;
+    while (fs.existsSync(meetingDir)) {
+      meetingDirName = `${baseMeetingDirName}_${duplicateIndex}`;
+      meetingDir = path.join(meetingsDir, meetingDirName);
+      duplicateIndex += 1;
+    }
 
     ensureDir(meetingDir);
     ensureDir(path.join(meetingDir, "pieces_jointes"));
@@ -1196,7 +1281,7 @@ app.post("/api/meetings/export", (req, res) => {
 
 ## Île / projet
 
-${projectName || ""}
+${project.name}
 
 ## Date
 
@@ -1248,9 +1333,16 @@ ${rawNotes || ""}
 `;
 
     fs.writeFileSync(path.join(meetingDir, "journal_de_bord_exporte.md"), markdown, "utf8");
-    fs.writeFileSync(path.join(meetingDir, "donnees_escale.json"), JSON.stringify(req.body, null, 2), "utf8");
+    const meetingData = {
+      ...req.body,
+      projectName: project.name,
+      projectSlug,
+      meetingDirName,
+      createdAt: new Date().toISOString()
+    };
+    fs.writeFileSync(path.join(meetingDir, "donnees_escale.json"), JSON.stringify(meetingData, null, 2), "utf8");
 
-    res.status(201).json({ status: "ok", meetingDir, meetingDirName });
+    res.status(201).json({ status: "ok", projectSlug, meetingDirName });
   } catch (error) {
     res.status(400).json({ error: error.message || "Erreur pendant l’export de l’escale." });
   }
@@ -1266,7 +1358,7 @@ app.post("/api/meetings/export-audio", upload.single("audio"), (req, res) => {
     if (!projectSlug || !safeMeetingDirName) throw new Error("Projet ou escale manquant.");
 
     const meetingDir = findMeetingDir(projectSlug, safeMeetingDirName);
-    ensureDir(meetingDir);
+    if (!fs.existsSync(meetingDir)) throw new Error("Escale introuvable. Exportez d’abord l’escale.");
 
     const extension = path.extname(req.file.originalname || "") || ".webm";
     const audioPath = path.join(meetingDir, `audio_original${extension}`);
@@ -1288,6 +1380,7 @@ app.get("/api/inbox", (req, res) => {
     for (const project of projects) {
       const meetingsDir = path.join(PROJECTS_ROOT, project.name, "01_escales_reunions");
       if (!fs.existsSync(meetingsDir)) continue;
+      const projectRecord = readProjectRecord(project.name);
 
       const meetings = fs.readdirSync(meetingsDir, { withFileTypes: true }).filter((entry) => entry.isDirectory());
 
@@ -1310,7 +1403,7 @@ app.get("/api/inbox", (req, res) => {
 
         items.push({
           projectSlug: project.name,
-          projectName: data?.projectName || project.name.replaceAll("_", " "),
+          projectName: data?.projectName || projectRecord.name,
           meetingDirName: meeting.name,
           title: data?.title || meeting.name,
           date: data?.meetingDate || meeting.name.slice(0, 10),
@@ -1340,6 +1433,10 @@ app.post("/api/meetings/validate", (req, res) => {
 
     const meetingDir = findMeetingDir(safeProjectSlug, safeMeetingDirName);
     const { exportedPath, validatedPath } = findReportPaths(meetingDir);
+
+    if (fs.existsSync(validatedPath)) {
+      return res.status(200).json({ status: "already-validated", validatedFileName: path.basename(validatedPath) });
+    }
 
     if (!fs.existsSync(exportedPath)) throw new Error("Journal de bord exporté introuvable.");
 
@@ -1424,11 +1521,18 @@ app.post("/api/meetings/save-report", (req, res) => {
     if (!safeProjectSlug || !safeMeetingDirName) throw new Error("Projet ou escale manquant.");
 
     const meetingDir = findMeetingDir(safeProjectSlug, safeMeetingDirName);
-    ensureDir(meetingDir);
+    if (!fs.existsSync(meetingDir)) throw new Error("Escale introuvable.");
 
     const exportedPath = path.join(meetingDir, "journal_de_bord_exporte.md");
+    if (fs.existsSync(path.join(meetingDir, "journal_de_bord_valide.md"))) {
+      throw new Error("Ce journal est déjà validé et protégé contre les modifications.");
+    }
+
+    const content = String(req.body.content || "").trim();
+    if (!content) throw new Error("Le journal de bord ne peut pas être vide.");
+
     createFileVersion(exportedPath, "avant_sauvegarde");
-    fs.writeFileSync(exportedPath, String(req.body.content || ""), "utf8");
+    fs.writeFileSync(exportedPath, `${content}\n`, "utf8");
 
     res.json({ status: "ok", savedFileName: path.basename(exportedPath) });
   } catch (error) {
@@ -1486,7 +1590,9 @@ app.post("/api/knowledge/:kind/validate", (req, res) => {
 
     const editableFields = kind === "action"
       ? ["action", "responsable", "echeance", "statut", "decisionId", "documentId"]
-      : ["decision", "date", "statut", "impact"];
+      : kind === "decision"
+        ? ["decision", "date", "statut", "impact"]
+        : ["need", "context", "priority", "statut"];
     const submitted = req.body.item && typeof req.body.item === "object" ? req.body.item : {};
     const validatedItem = { ...candidate };
     editableFields.forEach((field) => {
@@ -1512,13 +1618,16 @@ app.post("/api/knowledge/:kind/validate", (req, res) => {
   }
 });
 
-function walkFiles(dirPath, files = []) {
+function walkFiles(dirPath, files = [], { includeHistory = false } = {}) {
   if (!fs.existsSync(dirPath)) return files;
 
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = path.join(dirPath, entry.name);
-    if (entry.isDirectory()) walkFiles(fullPath, files);
+    if (entry.isDirectory()) {
+      if (entry.name === "99_versions" && !includeHistory) continue;
+      walkFiles(fullPath, files, { includeHistory });
+    }
     else if (entry.name.endsWith(".md") || entry.name.endsWith(".json") || entry.name.endsWith(".txt")) files.push(fullPath);
   }
 
@@ -1536,14 +1645,20 @@ function extractSnippet(content, query) {
 app.get("/api/search", (req, res) => {
   try {
     const query = String(req.query.q || "").trim();
-    const projectSlug = safeSegment(req.query.projectSlug);
+    const requestedProject = String(req.query.projectSlug || "").trim();
+    const projectSlug = requestedProject ? safeSegment(requestedProject) : "";
+    if (requestedProject && !projectSlug) throw new Error("Île/projet invalide.");
+    if (projectSlug && !fs.existsSync(safePathInside(PROJECTS_ROOT, projectSlug))) {
+      throw new Error("Île/projet introuvable.");
+    }
     if (!query) return res.json({ results: [] });
 
     const roots = projectSlug ? [safePathInside(PROJECTS_ROOT, projectSlug)] : [PROJECTS_ROOT];
+    const includeHistory = String(req.query.history || "") === "1";
     const results = [];
 
     for (const root of roots) {
-      for (const filePath of walkFiles(root)) {
+      for (const filePath of walkFiles(root, [], { includeHistory })) {
         const content = fs.readFileSync(filePath, "utf8");
         if (content.toLowerCase().includes(query.toLowerCase())) {
           const relativePath = path.relative(PROJECTS_ROOT, filePath);
@@ -1560,7 +1675,37 @@ app.get("/api/search", (req, res) => {
 
     res.json({ query, projectSlug, count: results.length, results: results.slice(0, 50) });
   } catch (error) {
-    res.status(500).json({ error: error.message || "Erreur pendant la recherche." });
+    res.status(400).json({ error: error.message || "Erreur pendant la recherche." });
+  }
+});
+
+app.get("/api/search/read", (req, res) => {
+  try {
+    const relativePath = String(req.query.relativePath || "").trim();
+    const requestedProject = String(req.query.projectSlug || "").trim();
+    const projectSlug = requestedProject ? safeSegment(requestedProject) : "";
+    if (!relativePath || relativePath.includes("\0") || path.isAbsolute(relativePath)) {
+      throw new Error("Source demandée invalide.");
+    }
+    if (requestedProject && !projectSlug) throw new Error("Île/projet invalide.");
+
+    const normalizedRelativePath = relativePath.replaceAll("\\", path.sep);
+    const filePath = safePathInside(PROJECTS_ROOT, normalizedRelativePath);
+    const relativeProjectPath = path.relative(PROJECTS_ROOT, filePath).split(path.sep);
+    if (projectSlug && relativeProjectPath[0] !== projectSlug) throw new Error("La source n’appartient pas à cette île.");
+    if (relativeProjectPath.includes("99_versions")) throw new Error("Les versions historiques ne sont pas ouvertes depuis la Longue-vue.");
+    if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) throw new Error("Source introuvable.");
+    if (![".md", ".json", ".txt"].includes(path.extname(filePath).toLowerCase())) throw new Error("Type de source non lisible.");
+
+    const content = fs.readFileSync(filePath, "utf8");
+    res.json({
+      relativePath: path.relative(PROJECTS_ROOT, filePath),
+      fileName: path.basename(filePath),
+      truncated: content.length > 200000,
+      content: content.slice(0, 200000)
+    });
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Erreur pendant la lecture de la source." });
   }
 });
 

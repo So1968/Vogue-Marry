@@ -1,15 +1,21 @@
 import { useState } from "react";
-import { searchMemory } from "../../lib/local-api.js";
+import { readMemorySource, searchMemory } from "../../lib/local-api.js";
 
-export default function SearchView() {
+export default function SearchView({ projects = [] }) {
   const [query, setQuery] = useState("");
+  const [projectFilter, setProjectFilter] = useState("");
   const [results, setResults] = useState([]);
+  const [source, setSource] = useState(null);
+  const [sourceBusy, setSourceBusy] = useState("");
+  const [sourceError, setSourceError] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   async function handleSubmit(event) {
     event.preventDefault();
     const value = query.trim();
+    setSource(null);
+    setSourceError("");
     if (!value) {
       setResults([]);
       return;
@@ -17,11 +23,28 @@ export default function SearchView() {
     setBusy(true);
     setError("");
     try {
-      setResults(await searchMemory(value));
+      setResults(await searchMemory(value, projectFilter));
     } catch (requestError) {
       setError(requestError.message || "Recherche indisponible.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleReadSource(result) {
+    const key = `${result.projectSlug}/${result.relativePath}`;
+    if (source?.relativePath === result.relativePath) {
+      setSource(null);
+      return;
+    }
+    setSourceBusy(key);
+    setSourceError("");
+    try {
+      setSource(await readMemorySource(result.relativePath, result.projectSlug));
+    } catch (requestError) {
+      setSourceError(requestError.message || "Impossible de lire cette source.");
+    } finally {
+      setSourceBusy("");
     }
   }
 
@@ -38,6 +61,10 @@ export default function SearchView() {
         <label htmlFor="memory-search">Mot ou expression</label>
         <div>
           <input id="memory-search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Ex. décision, réunion, personne…" />
+          <select aria-label="Filtrer par île" value={projectFilter} onChange={(event) => setProjectFilter(event.target.value)}>
+            <option value="">Toutes les îles</option>
+            {projects.map((project) => <option key={project.slug} value={project.slug}>{project.name}</option>)}
+          </select>
           <button type="submit" disabled={busy}>{busy ? "Recherche…" : "Chercher"}</button>
         </div>
       </form>
@@ -50,9 +77,19 @@ export default function SearchView() {
             <h3>{result.fileName}</h3>
             <p>{result.snippet}</p>
             <span>{result.relativePath}</span>
+            <button type="button" className="search-read-button" onClick={() => handleReadSource(result)} disabled={sourceBusy === `${result.projectSlug}/${result.relativePath}`}>
+              {sourceBusy === `${result.projectSlug}/${result.relativePath}` ? "Lecture…" : source?.relativePath === result.relativePath ? "Masquer la source" : "Lire la source"}
+            </button>
+            {source?.relativePath === result.relativePath ? (
+              <div className="search-source">
+                <small>{source.fileName}{source.truncated ? " · extrait limité" : ""}</small>
+                <pre>{source.content}</pre>
+              </div>
+            ) : null}
           </article>
         ))}
       </div>
+      {sourceError ? <p className="data-state error">{sourceError}</p> : null}
     </section>
   );
 }

@@ -42,6 +42,7 @@ export default function LogPoseView({ projectSlug = "", onOpen }) {
   const lastDecision = logPose?.lastDecision;
   const lastMeeting = logPose?.lastMeeting;
   const actions = logPose?.priorityActions || [];
+  const needs = logPose?.priorityNeeds || [];
 
   return (
     <aside className="log-pose" aria-label="Log Pose">
@@ -69,6 +70,14 @@ export default function LogPoseView({ projectSlug = "", onOpen }) {
                 {actions.slice(0, 3).map((action) => <li key={action.id}>{action.action}</li>)}
               </ul>
             ) : <p>Aucune manœuvre prioritaire validée.</p>}
+          </section>
+          <section className="log-section">
+            <label>Besoins à cadrer</label>
+            {needs.length ? (
+              <ul className="log-list">
+                {needs.slice(0, 3).map((need) => <li key={need.id}>{need.need}</li>)}
+              </ul>
+            ) : <p>Aucun besoin validé à cadrer.</p>}
           </section>
           <section className="log-section">
             <label>À surveiller</label>

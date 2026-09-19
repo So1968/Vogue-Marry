@@ -17,6 +17,14 @@ const VIEW_CONFIG = {
     emptyTitle: "Aucun cap validé",
     emptyText: "Les décisions apparaîtront ici après validation d’un journal de bord.",
     textLabel: "Décision"
+  },
+  need: {
+    title: "Besoins",
+    kicker: "Construction",
+    description: "Les besoins repérés en réunion restent à préciser et à valider avant d’orienter la construction.",
+    emptyTitle: "Aucun besoin identifié",
+    emptyText: "Les besoins apparaîtront ici après validation d’un journal de bord ou d’un marqueur d’escale.",
+    textLabel: "Besoin utilisateur"
   }
 };
 
@@ -37,12 +45,19 @@ function draftFromItem(item, kind) {
       decisionId: item.decisionId || "",
       documentId: item.documentId || ""
     }
-    : {
+    : kind === "decision"
+      ? {
       decision: item.decision || "",
       date: item.date || "",
       statut: item.statut || "À préciser",
       impact: item.impact || ""
-    };
+    }
+      : {
+        need: item.need || "",
+        context: item.context || "",
+        priority: item.priority || "À préciser",
+        statut: item.statut || "À préciser"
+      };
 }
 
 function KnowledgeCard({ item, kind, onValidate, busy }) {
@@ -59,7 +74,7 @@ function KnowledgeCard({ item, kind, onValidate, busy }) {
       <div className="knowledge-card-heading">
         <div>
           <small>{item.projectName || "Île non renseignée"}</small>
-          <h3>{pending ? config.textLabel : (kind === "action" ? item.action : item.decision)}</h3>
+          <h3>{pending ? config.textLabel : (kind === "action" ? item.action : kind === "decision" ? item.decision : item.need)}</h3>
         </div>
         <span className={`knowledge-status${pending ? " pending" : ""}`}>{pending ? "À valider" : "Validé"}</span>
       </div>
@@ -81,15 +96,21 @@ function KnowledgeCard({ item, kind, onValidate, busy }) {
               <label>Décision liée<input value={draft.decisionId} onChange={(event) => updateField("decisionId", event.target.value)} placeholder="Facultatif" /></label>
               <label>Document lié<input value={draft.documentId} onChange={(event) => updateField("documentId", event.target.value)} placeholder="Facultatif" /></label>
             </div>
-          ) : (
+          ) : kind === "decision" ? (
             <div className="knowledge-edit-grid">
               <label>Date<input value={draft.date} onChange={(event) => updateField("date", event.target.value)} /></label>
               <label>Statut<input value={draft.statut} onChange={(event) => updateField("statut", event.target.value)} /></label>
               <label className="knowledge-wide-field">Impact / conséquence<textarea value={draft.impact} onChange={(event) => updateField("impact", event.target.value)} rows={2} placeholder="À préciser" /></label>
             </div>
+          ) : (
+            <div className="knowledge-edit-grid">
+              <label className="knowledge-wide-field">Contexte / preuve<textarea value={draft.context} onChange={(event) => updateField("context", event.target.value)} rows={2} placeholder="Qui l’a exprimé, dans quel contexte, avec quelle preuve ?" /></label>
+              <label>Priorité<input value={draft.priority} onChange={(event) => updateField("priority", event.target.value)} placeholder="À préciser" /></label>
+              <label>Statut<input value={draft.statut} onChange={(event) => updateField("statut", event.target.value)} /></label>
+            </div>
           )}
-          <button type="button" className="knowledge-validate-button" onClick={() => onValidate(item, draft)} disabled={busy || !draft[kind === "action" ? "action" : "decision"].trim()}>
-            {busy ? "Validation…" : `Valider ce${kind === "action" ? "tte action" : "tte décision"}`}
+          <button type="button" className="knowledge-validate-button" onClick={() => onValidate(item, draft)} disabled={busy || !draft[kind === "action" ? "action" : kind === "decision" ? "decision" : "need"].trim()}>
+            {busy ? "Validation…" : `Valider ce${kind === "action" ? "tte action" : kind === "decision" ? "tte décision" : " besoin"}`}
           </button>
         </div>
       ) : (
@@ -100,9 +121,15 @@ function KnowledgeCard({ item, kind, onValidate, busy }) {
               <div><strong>Échéance</strong><span>{item.echeance || "À préciser"}</span></div>
               <div><strong>Statut</strong><span>{item.statut || "À préciser"}</span></div>
             </>
-          ) : (
+          ) : kind === "decision" ? (
             <>
               <div><strong>Impact</strong><span>{item.impact || "À préciser"}</span></div>
+              <div><strong>Statut</strong><span>{item.statut || "À préciser"}</span></div>
+            </>
+          ) : (
+            <>
+              <div><strong>Contexte / preuve</strong><span>{item.context || "À préciser"}</span></div>
+              <div><strong>Priorité</strong><span>{item.priority || "À préciser"}</span></div>
               <div><strong>Statut</strong><span>{item.statut || "À préciser"}</span></div>
             </>
           )}
@@ -150,7 +177,8 @@ export default function KnowledgeView({ kind, projects = [] }) {
         projectSlug: item.projectSlug,
         item: draft
       });
-      setNotice(`${kind === "action" ? "Action" : "Décision"} validée dans ${item.projectName}.`);
+      const label = kind === "action" ? "Action" : kind === "decision" ? "Décision" : "Besoin";
+      setNotice(`${label} validé${kind === "action" || kind === "decision" ? "e" : ""} dans ${item.projectName}.`);
       await refresh();
     } catch (requestError) {
       setError(requestError.message || "Impossible de valider cet élément.");

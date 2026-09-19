@@ -30,10 +30,10 @@ export function makeProjectViewModel(project, meetings, index = 0) {
     tone,
     detail: projectMeetingsList.length
       ? `${projectMeetingsList.length} escale${projectMeetingsList.length > 1 ? "s" : ""} enregistrée${projectMeetingsList.length > 1 ? "s" : ""}`
-      : "Aucune escale enregistrée",
+      : project.description || "Aucune escale enregistrée",
     cap: projectMeetingsList.length
       ? "La mémoire du projet est disponible dans ses escales et ses journaux."
-      : "Créer une première escale pour commencer la mémoire du projet.",
+      : project.description || "Créer une première escale pour commencer la mémoire du projet.",
     next: pendingMeeting
       ? `${pendingMeeting.title} · ${pendingMeeting.status}`
       : projectMeetingsList.length
@@ -42,4 +42,3 @@ export function makeProjectViewModel(project, meetings, index = 0) {
     meetings: projectMeetingsList
   };
 }
-

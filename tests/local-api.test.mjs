@@ -121,12 +121,23 @@ test("API mémoire : crée une escale, rattache un audio et la retrouve", async 
     const projectResponse = await fetch("http://127.0.0.1:8010/api/projects", {
       method: "POST",
       ...requestOptions,
-      body: JSON.stringify({ name: "Projet démo" })
+      body: JSON.stringify({ name: "Projet démo", description: "Reprendre le cadrage sans perdre le contexte." })
     });
     assert.equal(projectResponse.status, 201);
     const projectPayload = await projectResponse.json();
     assert.equal(projectPayload.project.slug, "projet_demo");
     assert.equal("path" in projectPayload.project, false);
+
+    const projectsResponse = await fetch("http://127.0.0.1:8010/api/projects", {
+      headers: { Origin: "http://localhost:5173" }
+    });
+    const projectsPayload = await projectsResponse.json();
+    assert.deepEqual(projectsPayload.projects[0], {
+      slug: "projet_demo",
+      name: "Projet démo",
+      description: "Reprendre le cadrage sans perdre le contexte.",
+      createdAt: projectsPayload.projects[0].createdAt
+    });
 
     const meetingResponse = await fetch("http://127.0.0.1:8010/api/meetings/export", {
       method: "POST",
@@ -144,6 +155,7 @@ test("API mémoire : crée une escale, rattache un audio et la retrouve", async 
     assert.equal(meetingResponse.status, 201);
     const meetingPayload = await meetingResponse.json();
     assert.match(meetingPayload.meetingDirName, /^2026-09-19_reunion_reunion_test$/u);
+    assert.equal("meetingDir" in meetingPayload, false);
 
     const audioForm = new FormData();
     audioForm.append("projectName", "Projet démo");
@@ -183,12 +195,93 @@ test("API mémoire : crée une escale, rattache un audio et la retrouve", async 
     assert.ok(search.count >= 1);
     assert.equal("filePath" in search.results[0], false);
 
+    const sourceResponse = await fetch("http://127.0.0.1:8010/api/search/read?projectSlug=projet_demo&relativePath=projet_demo%2F01_escales_reunions%2F2026-09-19_reunion_reunion_test%2Fjournal_de_bord_exporte.md", {
+      headers: { Origin: "http://localhost:5173" }
+    });
+    assert.equal(sourceResponse.status, 200);
+    assert.match((await sourceResponse.json()).content, /Réunion test/u);
+
+    const invalidSourceResponse = await fetch("http://127.0.0.1:8010/api/search/read?projectSlug=projet_demo&relativePath=projet_autre%2Fnotes.md", {
+      headers: { Origin: "http://localhost:5173" }
+    });
+    assert.equal(invalidSourceResponse.status, 400);
+
     const validateResponse = await fetch("http://127.0.0.1:8010/api/meetings/validate", {
       method: "POST",
       ...requestOptions,
       body: JSON.stringify({ projectSlug: "projet_demo", meetingDirName: meetingPayload.meetingDirName })
     });
     assert.equal(validateResponse.status, 201);
+
+    const secondValidateResponse = await fetch("http://127.0.0.1:8010/api/meetings/validate", {
+      method: "POST",
+      ...requestOptions,
+      body: JSON.stringify({ projectSlug: "projet_demo", meetingDirName: meetingPayload.meetingDirName })
+    });
+    assert.equal(secondValidateResponse.status, 200);
+    assert.equal((await secondValidateResponse.json()).status, "already-validated");
+
+    const editValidatedResponse = await fetch("http://127.0.0.1:8010/api/meetings/save-report", {
+      method: "POST",
+      ...requestOptions,
+      body: JSON.stringify({
+        projectSlug: "projet_demo",
+        meetingDirName: meetingPayload.meetingDirName,
+        content: "Modification interdite après validation"
+      })
+    });
+    assert.equal(editValidatedResponse.status, 400);
+
+    const invalidSearchResponse = await fetch("http://127.0.0.1:8010/api/search?q=décision&projectSlug=inconnu", {
+      headers: { Origin: "http://localhost:5173" }
+    });
+    assert.equal(invalidSearchResponse.status, 400);
+  });
+});
+
+test("API mémoire : deux escales identiques restent deux traces distinctes", async () => {
+  await withServer("backend/server.js", 8010, async () => {
+    const requestOptions = {
+      headers: {
+        "Content-Type": "application/json",
+        Origin: "http://localhost:5173"
+      }
+    };
+    const projectResponse = await fetch("http://127.0.0.1:8010/api/projects", {
+      method: "POST",
+      ...requestOptions,
+      body: JSON.stringify({ name: "Projet doublon" })
+    });
+    assert.equal(projectResponse.status, 201);
+
+    const meetingData = {
+      projectName: "Projet doublon",
+      meetingDate: "2026-09-19",
+      meetingType: "réunion",
+      title: "Point hebdomadaire"
+    };
+    const firstResponse = await fetch("http://127.0.0.1:8010/api/meetings/export", {
+      method: "POST",
+      ...requestOptions,
+      body: JSON.stringify(meetingData)
+    });
+    const secondResponse = await fetch("http://127.0.0.1:8010/api/meetings/export", {
+      method: "POST",
+      ...requestOptions,
+      body: JSON.stringify(meetingData)
+    });
+    assert.equal(firstResponse.status, 201);
+    assert.equal(secondResponse.status, 201);
+    const first = await firstResponse.json();
+    const second = await secondResponse.json();
+    assert.equal(first.meetingDirName, "2026-09-19_reunion_point_hebdomadaire");
+    assert.equal(second.meetingDirName, "2026-09-19_reunion_point_hebdomadaire_2");
+
+    const inboxResponse = await fetch("http://127.0.0.1:8010/api/inbox", {
+      headers: { Origin: "http://localhost:5173" }
+    });
+    const inbox = await inboxResponse.json();
+    assert.equal(inbox.items.length, 2);
   });
 });
 
@@ -282,8 +375,9 @@ test("API mémoire : extrait puis valide actions et décisions des journaux", as
         meetingType: "réunion",
         title: "Décisions et actions",
         decisions: "| Date | Cap validé / décision | Statut | Source | Impact |\n|---|---|---|---|---|\n| 2026-09-19 | Utiliser la mémoire locale | Acté | Réunion | Moins de doublons |",
+        screens: "Pouvoir retrouver les besoins validés par projet.",
         actions: "- Préparer la courte transcription locale\n- Vérifier le classement du Coffre",
-        rawNotes: "[]"
+        rawNotes: JSON.stringify([{ type: "need", label: "Besoin utilisateur", timeLabel: "00:30" }])
       })
     });
     assert.equal(meetingResponse.status, 201);
@@ -316,6 +410,14 @@ test("API mémoire : extrait puis valide actions et décisions des journaux", as
     const decisionsPayload = await decisionsResponse.json();
     assert.equal(decisionsPayload.pendingCount, 1);
     assert.equal(decisionsPayload.items[0].decision, "Utiliser la mémoire locale");
+
+    const needsResponse = await fetch("http://127.0.0.1:8010/api/knowledge/need?projectSlug=projet_connaissance", {
+      headers: { Origin: "http://localhost:5173" }
+    });
+    const needsPayload = await needsResponse.json();
+    assert.equal(needsPayload.pendingCount, 2);
+    assert.equal(needsPayload.items[0].need, "Pouvoir retrouver les besoins validés par projet.");
+    assert.equal(needsPayload.items[1].origin, "marqueur");
 
     const actionToValidate = actionsPayload.items.find((item) => item.action === "Préparer la courte transcription locale");
     const actionValidation = await fetch("http://127.0.0.1:8010/api/knowledge/action/validate", {
@@ -351,6 +453,30 @@ test("API mémoire : extrait puis valide actions et décisions des journaux", as
     });
     assert.equal(decisionValidation.status, 201);
 
+    const needToValidate = needsPayload.items[0];
+    const needValidation = await fetch("http://127.0.0.1:8010/api/knowledge/need/validate", {
+      method: "POST",
+      ...requestOptions,
+      body: JSON.stringify({
+        itemId: needToValidate.id,
+        projectSlug: "projet_connaissance",
+        item: {
+          need: needToValidate.need,
+          context: "Besoin formulé pour éviter les recherches manuelles.",
+          priority: "Haute",
+          statut: "À cadrer"
+        }
+      })
+    });
+    assert.equal(needValidation.status, 201);
+
+    const needLogPoseResponse = await fetch("http://127.0.0.1:8010/api/log-pose?projectSlug=projet_connaissance", {
+      headers: { Origin: "http://localhost:5173" }
+    });
+    const needLogPosePayload = await needLogPoseResponse.json();
+    assert.equal(needLogPosePayload.logPose.pendingReview.needs, 1);
+    assert.equal(needLogPosePayload.logPose.priorityNeeds[0].need, "Pouvoir retrouver les besoins validés par projet.");
+
     const storedActions = JSON.parse(fs.readFileSync(path.join(
       home,
       "VOGUE-MERRY-DONNEES",
@@ -377,7 +503,7 @@ test("API mémoire : extrait puis valide actions et décisions des journaux", as
     const logPosePayload = await logPoseResponse.json();
     assert.equal(logPosePayload.logPose.lastDecision.decision, "Utiliser la mémoire locale");
     assert.equal(logPosePayload.logPose.priorityActions[0].responsable, "Sofia");
-    assert.equal(logPosePayload.logPose.pendingReview.total, 1);
+    assert.equal(logPosePayload.logPose.pendingReview.total, 2);
 
     const globalLogPoseResponse = await fetch("http://127.0.0.1:8010/api/log-pose", {
       headers: { Origin: "http://localhost:5173" }

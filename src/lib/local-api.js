@@ -17,6 +17,13 @@ export async function loadProjects() {
   return Array.isArray(payload.projects) ? payload.projects : [];
 }
 
+export function createProject({ name, description = "" }) {
+  return localApi("/api/projects", {
+    method: "POST",
+    body: JSON.stringify({ name, description })
+  });
+}
+
 export async function loadInbox() {
   const payload = await localApi("/api/inbox");
   return Array.isArray(payload.items) ? payload.items : [];
@@ -80,6 +87,18 @@ export async function searchMemory(query, projectSlug = "") {
   return Array.isArray(payload.results) ? payload.results : [];
 }
 
+export async function readMemorySource(relativePath, projectSlug = "") {
+  const params = new URLSearchParams({ relativePath });
+  if (projectSlug) params.set("projectSlug", projectSlug);
+  const payload = await localApi(`/api/search/read?${params.toString()}`);
+  return {
+    fileName: payload.fileName || relativePath,
+    relativePath: payload.relativePath || relativePath,
+    truncated: Boolean(payload.truncated),
+    content: payload.content || ""
+  };
+}
+
 export function exportMeeting(data) {
   return localApi("/api/meetings/export", {
     method: "POST",
@@ -93,4 +112,18 @@ export function exportMeetingAudio({ projectName, meetingDirName, blob }) {
   form.append("meetingDirName", meetingDirName);
   form.append("audio", blob, "reunion.webm");
   return localApi("/api/meetings/export-audio", { method: "POST", body: form });
+}
+
+export function saveMeetingReport({ projectSlug, meetingDirName, content }) {
+  return localApi("/api/meetings/save-report", {
+    method: "POST",
+    body: JSON.stringify({ projectSlug, meetingDirName, content })
+  });
+}
+
+export function validateMeeting({ projectSlug, meetingDirName }) {
+  return localApi("/api/meetings/validate", {
+    method: "POST",
+    body: JSON.stringify({ projectSlug, meetingDirName })
+  });
 }

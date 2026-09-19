@@ -78,6 +78,11 @@ test("les écrans principaux consomment la mémoire locale plutôt qu'une maquet
   assert.equal(exists("src/features/projects/ProjectsView.jsx"), true);
   assert.equal(exists("src/features/meetings/MeetingModePanel.jsx"), true);
   assert.equal(exists("src/features/search/SearchView.jsx"), true);
+  assert.match(read("src/features/projects/ProjectsView.jsx"), /createProject/u);
+  assert.match(read("src/features/meetings/MeetingsView.jsx"), /Enregistrer les corrections/u);
+  assert.match(read("src/features/search/SearchView.jsx"), /Filtrer par île/u);
+  assert.match(read("src/features/search/SearchView.jsx"), /Lire la source/u);
+  assert.match(read("src/lib/local-api.js"), /readMemorySource/u);
 });
 
 test("les pages de démonstration obsolètes ne sont plus publiées", () => {
@@ -150,6 +155,19 @@ test("les Manœuvres et Caps viennent des journaux validés", () => {
   assert.match(app, /KnowledgeView kind="action"/u);
   assert.match(app, /KnowledgeView kind="decision"/u);
   assert.equal(exists("src/features/knowledge/KnowledgeView.jsx"), true);
+});
+
+test("les besoins de construction restent traçables et validables", () => {
+  const memoryApi = read("backend/server.js");
+  const meetingMode = read("src/components/MeetingMode.jsx");
+  const knowledgeView = read("src/features/knowledge/KnowledgeView.jsx");
+  const app = read("src/App.jsx");
+  assert.match(memoryApi, /need:/u);
+  assert.match(memoryApi, /besoins\.json/u);
+  assert.match(memoryApi, /type === "need"/u);
+  assert.match(meetingMode, /Besoin utilisateur/u);
+  assert.match(knowledgeView, /Besoins/u);
+  assert.match(app, /KnowledgeView kind="need"/u);
 });
 
 test("le Log Pose persiste et reprend les validations", () => {

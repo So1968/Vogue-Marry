@@ -13,7 +13,9 @@ function parseParticipants(value) {
 export default function MeetingModePanel({ projects, onSaved }) {
   const [projectSlug, setProjectSlug] = useState(projects[0]?.slug || "");
   const [title, setTitle] = useState("");
+  const [meetingType, setMeetingType] = useState("réunion");
   const [participants, setParticipants] = useState("");
+  const [context, setContext] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [saving, setSaving] = useState(false);
   const [markers, setMarkers] = useState([]);
@@ -76,10 +78,10 @@ export default function MeetingModePanel({ projects, onSaved }) {
           const meeting = await exportMeeting({
             projectName: selectedProject.name,
             meetingDate: new Date().toISOString().slice(0, 10),
-            meetingType: "réunion",
+            meetingType,
             title: title.trim(),
             participants: parseParticipants(participants),
-            context: "Enregistrement créé depuis le mode réunion Vogue Marry.",
+            context: context.trim(),
             rawNotes: JSON.stringify(markersRef.current)
           });
           await exportMeetingAudio({
@@ -91,7 +93,9 @@ export default function MeetingModePanel({ projects, onSaved }) {
           setMarkers([]);
           markersRef.current = [];
           setTitle("");
+          setMeetingType("réunion");
           setParticipants("");
+          setContext("");
           onSaved?.();
         } catch (saveError) {
           setError(saveError.message || "Impossible d’enregistrer l’escale.");
@@ -141,8 +145,22 @@ export default function MeetingModePanel({ projects, onSaved }) {
             <input value={title} onChange={(event) => setTitle(event.target.value)} disabled={isRecording || saving} placeholder="Ex. réunion de cadrage" />
           </label>
           <label>
+            Type d’escale
+            <select value={meetingType} onChange={(event) => setMeetingType(event.target.value)} disabled={isRecording || saving}>
+              <option value="réunion">Réunion</option>
+              <option value="entretien">Entretien</option>
+              <option value="atelier besoins">Atelier besoins</option>
+              <option value="comité">Comité</option>
+              <option value="suivi">Suivi</option>
+            </select>
+          </label>
+          <label>
             Participants
             <input value={participants} onChange={(event) => setParticipants(event.target.value)} disabled={isRecording || saving} placeholder="Sofia, Pierre…" />
+          </label>
+          <label className="meeting-context-field">
+            Objectif / contexte de l’escale
+            <textarea value={context} onChange={(event) => setContext(event.target.value)} disabled={isRecording || saving} placeholder="Pourquoi cette réunion a lieu, ce qu’il faut comprendre ou décider…" rows={2} />
           </label>
         </div>
       </div>

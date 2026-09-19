@@ -74,8 +74,12 @@ Pendant la consolidation :
 - [x] `MeetingMode` relié à la création d'une escale, aux marqueurs et à l'export audio ;
 - [x] interface et tests de transcription branchés sur la façade unifiée 8010 ;
 - [x] transcription V6 recopiée dans l'escale et affichée dans le journal ; lecture et validation reliées à l'interface ;
+- [x] projets persistés avec nom/contexte métier, création d’île depuis l’interface et aucune fuite de chemin absolu ;
+- [x] escales identiques conservées séparément, rattachement audio refusé si l’escale n’existe pas, validation idempotente et journal validé protégé ;
+- [x] journal de travail corrigeable dans l’interface avant validation, avec historique des sauvegardes ;
 - [x] Coffre branché sur les documents locaux, avec dépôt Water Seven, proposition de classement et validation humaine vers une île ;
 - [x] Manœuvres et Caps validés alimentés par les journaux de bord validés, avec proposition puis validation humaine ;
+- [x] besoins de construction repérables pendant une réunion, soumis à validation humaine et repris dans le Log Pose ;
 - [x] Log Pose persisté par île, recalculé après validation des journaux/actions/caps et affiché depuis la mémoire locale ;
 - [ ] faire tourner les tests locaux sur le poste de développement ;
 - [ ] tester une courte transcription locale sans appel API payant.
@@ -99,6 +103,8 @@ Pendant la consolidation :
 ### P2 — réunification produit
 
 1. Enrichir le Log Pose avec les questions ouvertes et les documents à retrouver issus des briques dédiées.
+2. Ajouter une lecture source ciblée dans Longue-vue, avec ouverture contrôlée du document relatif plutôt qu’un simple extrait.
+3. Extraire progressivement `App.jsx` en composants de navigation et de shell sans modifier le contrat métier.
 
 ## Condition avant intégration dans `main`
 

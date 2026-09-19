@@ -3,6 +3,7 @@ import {
   Anchor,
   Bell,
   BookOpen,
+  ClipboardList,
   ChevronRight,
   Compass,
   FolderOpen,
@@ -26,6 +27,7 @@ const MENU = [
   { id: "iles", label: "Îles", sublabel: "Vos projets", icon: Map },
   { id: "escales", label: "Escales", sublabel: "Réunions & comités", icon: Anchor },
   { id: "journal", label: "Journal", sublabel: "Comptes rendus", icon: BookOpen },
+  { id: "besoins", label: "Besoins", sublabel: "Construction", icon: ClipboardList },
   { id: "coffre", label: "Coffre", sublabel: "Documents", icon: FolderOpen },
   { id: "longuevue", label: "Longue-vue", sublabel: "Recherche & veille", icon: Telescope },
   { id: "manoeuvres", label: "Manœuvres", sublabel: "Actions à mener", icon: Sailboat },
@@ -195,6 +197,11 @@ button { font: inherit; }
 .meeting-report { max-height: 340px; margin-top: 15px; padding: 11px; overflow: auto; border: 1px solid rgba(112,75,28,.22); border-radius: 7px; background: rgba(255,255,255,.24); }
 .meeting-report small { margin-bottom: 8px; }
 .meeting-report pre { margin: 0; white-space: pre-wrap; color: #55442d; font: .75rem/1.45 Arial,sans-serif; }
+.meeting-report textarea { width: 100%; min-height: 260px; resize: vertical; padding: 10px; color: #55442d; border: 1px solid rgba(112,75,28,.28); border-radius: 6px; background: rgba(255,255,255,.62); font: .75rem/1.45 Arial,sans-serif; }
+.meeting-report-actions { margin-top: 9px; display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
+.meeting-report-actions button { padding: 7px 10px; color: #3f301a; border: 1px solid rgba(112,75,28,.28); border-radius: 6px; background: #efd79c; cursor: pointer; font: 700 .7rem Arial,sans-serif; }
+.meeting-report-actions button:disabled { opacity: .6; cursor: wait; }
+.meeting-report-actions span { color: #806334; font: .68rem Arial,sans-serif; }
 .documents-toolbar { margin-bottom: 18px; padding: 13px 15px; display: flex; align-items: end; justify-content: space-between; gap: 14px; color: #4d3b25; border: 1px solid #8d6431; border-radius: 9px; background: linear-gradient(180deg,#fff1ca,#e5c785); }
 .documents-toolbar label { display: grid; gap: 5px; color: #6d542f; font: 700 .67rem Arial,sans-serif; letter-spacing: .04em; text-transform: uppercase; }
 .documents-toolbar select { min-width: 190px; padding: 8px 9px; color: #332715; border: 1px solid rgba(112,75,28,.34); border-radius: 6px; background: rgba(255,255,255,.65); font: .78rem Arial,sans-serif; }
@@ -247,17 +254,25 @@ button { font: inherit; }
 .search-form label { display: block; margin-bottom: 7px; font: 700 .7rem Arial,sans-serif; letter-spacing: .06em; text-transform: uppercase; }
 .search-form > div { display: flex; gap: 8px; }
 .search-form input { min-width: 0; flex: 1; padding: 10px 11px; color: #332715; border: 1px solid rgba(112,75,28,.34); border-radius: 6px; background: rgba(255,255,255,.65); font: .85rem Arial,sans-serif; }
+.search-form select { max-width: 220px; padding: 9px 10px; color: #332715; border: 1px solid rgba(112,75,28,.34); border-radius: 6px; background: rgba(255,255,255,.65); font: .78rem Arial,sans-serif; }
 .search-form button { padding: 9px 13px; color: #26313a; border: 1px solid #b7873d; border-radius: 6px; background: #efd79c; cursor: pointer; font: 700 .78rem Arial,sans-serif; }
 .search-form button:disabled { opacity: .6; cursor: wait; }
 .search-result { min-height: 0; }
 .search-result span { display: block; margin-top: 12px; color: #806334; overflow-wrap: anywhere; font: .7rem Arial,sans-serif; }
+.search-read-button { margin-top: 12px; padding: 7px 9px; color: #3f301a; border: 1px solid rgba(112,75,28,.28); border-radius: 6px; background: rgba(255,255,255,.3); cursor: pointer; font: 700 .7rem Arial,sans-serif; }
+.search-read-button:disabled { opacity: .6; cursor: wait; }
+.search-source { max-height: 260px; margin-top: 10px; padding: 9px; overflow: auto; border: 1px solid rgba(112,75,28,.22); border-radius: 6px; background: rgba(255,255,255,.28); }
+.search-source small { display: block; margin-bottom: 7px; color: #806334; font: 700 .65rem Arial,sans-serif; }
+.search-source pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: #55442d; font: .7rem/1.4 Arial,sans-serif; }
 .meeting-mode-shell { margin-bottom: 20px; padding: 16px; color: #332715; border: 1px solid #8d6431; border-radius: 10px; background: linear-gradient(180deg,#fff1ca,#e5c785); box-shadow: 0 10px 20px rgba(0,0,0,.18),inset 0 0 0 2px rgba(255,255,255,.36); }
 .meeting-setup { display: grid; grid-template-columns: minmax(180px,.8fr) minmax(0,1.2fr); gap: 20px; align-items: start; }
 .meeting-setup h3 { margin: 3px 0 6px; font-size: 1.3rem; }
 .meeting-setup p { margin: 0; color: #675438; font: .8rem/1.4 Arial,sans-serif; }
 .meeting-setup-fields { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; }
 .meeting-setup-fields label { display: grid; gap: 5px; color: #6d542f; font: 700 .67rem Arial,sans-serif; letter-spacing: .04em; text-transform: uppercase; }
-.meeting-setup-fields input, .meeting-setup-fields select { width: 100%; min-width: 0; padding: 9px 8px; color: #332715; border: 1px solid rgba(112,75,28,.34); border-radius: 6px; background: rgba(255,255,255,.65); font: .78rem Arial,sans-serif; }
+.meeting-setup-fields input, .meeting-setup-fields select, .meeting-setup-fields textarea { width: 100%; min-width: 0; padding: 9px 8px; color: #332715; border: 1px solid rgba(112,75,28,.34); border-radius: 6px; background: rgba(255,255,255,.65); font: .78rem Arial,sans-serif; }
+.meeting-setup-fields textarea { resize: vertical; }
+.meeting-context-field { grid-column: 1/-1; }
 .meeting-notice { margin: 12px 0 0 !important; padding: 9px 11px; color: #315b43 !important; border: 1px solid rgba(49,91,67,.25); border-radius: 6px; background: rgba(170,224,183,.35); font: .78rem Arial,sans-serif !important; }
 .meetingMode { margin-top: 16px; padding-top: 15px; border-top: 1px solid rgba(112,75,28,.22); }
 .meetingMode .meetingTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; }
@@ -283,6 +298,18 @@ button { font: inherit; }
 .islands-view { height: 100%; min-height: 470px; padding: 22px 24px 24px; background: linear-gradient(160deg,#0c6175,#07384e); box-shadow: inset 0 0 0 10px rgba(62,32,12,.55); overflow: auto; }
 .islands-toolbar { min-height: 42px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 16px; color: #f1dca6; }
 .islands-toolbar p { margin: 0; font: .82rem/1.35 Arial,sans-serif; color: #d8c89d; }
+.project-create-form { margin-bottom: 18px; padding: 16px; display: grid; grid-template-columns: minmax(180px,1fr) minmax(180px,1fr) auto; gap: 12px 16px; align-items: end; color: #332715; border: 1px solid #8d6431; border-radius: 9px; background: linear-gradient(180deg,#fff1ca,#e5c785); box-shadow: 0 8px 16px rgba(0,0,0,.16),inset 0 0 0 2px rgba(255,255,255,.28); }
+.project-create-form > div { grid-row: span 2; align-self: center; }
+.project-create-form h3 { margin: 3px 0 5px; font-size: 1.16rem; }
+.project-create-form p { margin: 0; color: #675438; font: .76rem/1.35 Arial,sans-serif; }
+.project-create-form label { display: grid; gap: 5px; color: #6d542f; font: 700 .67rem Arial,sans-serif; letter-spacing: .04em; text-transform: uppercase; }
+.project-create-form label span { font-weight: 400; text-transform: none; }
+.project-create-form input, .project-create-form textarea { width: 100%; padding: 9px 10px; color: #332715; border: 1px solid rgba(112,75,28,.34); border-radius: 6px; background: rgba(255,255,255,.65); font: .82rem Arial,sans-serif; }
+.project-create-form textarea { resize: vertical; }
+.project-create-form > button { padding: 9px 12px; color: #26313a; border: 1px solid #b7873d; border-radius: 6px; background: #efd79c; cursor: pointer; font: 700 .75rem Arial,sans-serif; }
+.project-create-form > button:disabled { opacity: .6; cursor: wait; }
+.form-message { grid-column: 2/-1; margin: -4px 0 0 !important; color: #315b43 !important; }
+.form-message.error { color: #8b3f2d !important; }
 .view-switch { display: inline-flex; flex: 0 0 auto; padding: 3px; border: 1px solid rgba(238,213,154,.42); border-radius: 8px; background: rgba(4,29,40,.34); }
 .view-switch button { padding: 7px 13px; border: 0; border-radius: 5px; color: #ead5a4; background: transparent; cursor: pointer; font: 700 .76rem Arial,sans-serif; }
 .view-switch button.active { color: #26313a; background: #efd79c; }
@@ -425,6 +452,11 @@ button { font: inherit; }
   .knowledge-edit-grid, .knowledge-details { grid-template-columns: 1fr; }
   .knowledge-wide-field { grid-column: auto; }
   .meeting-setup, .meeting-setup-fields { grid-template-columns: 1fr; }
+  .search-form > div { flex-direction: column; }
+  .search-form select { max-width: none; }
+  .project-create-form { grid-template-columns: 1fr; }
+  .project-create-form > div { grid-row: auto; }
+  .form-message { grid-column: auto; }
   .markerGrid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .world-summary-card.wide { grid-column: auto; }
   .world-map { grid-template-columns: repeat(2,minmax(0,1fr)); }
@@ -728,7 +760,8 @@ function GenericView({ active, meetings, projects, loading, error, onSaved }) {
   if (active === "escales") return <MeetingsView meetings={meetings} projects={projects} loading={loading} error={error} onSaved={onSaved} />;
   if (active === "journal") return <MeetingsView meetings={meetings} loading={loading} error={error} journalOnly onSaved={onSaved} />;
   if (active === "coffre") return <DocumentsView projects={projects} />;
-  if (active === "longuevue") return <SearchView />;
+  if (active === "longuevue") return <SearchView projects={projects} />;
+  if (active === "besoins") return <KnowledgeView kind="need" projects={projects} />;
   if (active === "manoeuvres") return <KnowledgeView kind="action" projects={projects} />;
   if (active === "caps") return <KnowledgeView kind="decision" projects={projects} />;
 
@@ -791,7 +824,7 @@ export default function App() {
   const centralView = useMemo(() => {
     if (selectedProject) return <IslandProjectView project={selectedProject} onBack={() => setSelectedProject(null)} />;
     if (active === "pont") return <PontView projects={projectViewModels} meetings={meetings} onOpenProject={openProject} />;
-    if (active === "iles") return <IslandsView projects={projects} meetings={meetings} loading={loadingData} error={dataError} onOpenProject={openProject} />;
+    if (active === "iles") return <IslandsView projects={projects} meetings={meetings} loading={loadingData} error={dataError} onOpenProject={openProject} onSaved={refreshData} />;
     return <GenericView active={active} meetings={meetings} projects={projects} loading={loadingData} error={dataError} onSaved={refreshData} />;
   }, [active, dataError, loadingData, meetings, openProject, projectViewModels, projects, refreshData, selectedProject]);
 

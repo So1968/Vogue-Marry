@@ -45,8 +45,8 @@ export default function LogPoseView({ projectSlug = "", onOpen }) {
   const needs = logPose?.priorityNeeds || [];
 
   return (
-    <aside className="log-pose" aria-label="Log Pose">
-      <h2>Log Pose</h2>
+    <aside className="log-pose" aria-label={projectSlug ? "Log Pose du projet" : "Log Pose général"}>
+      <h2>{projectSlug ? "Log Pose de l’île" : "Log Pose du Pont"}</h2>
       <div className="log-ornament" />
       <div className="log-compass"><Compass size={82} /></div>
       {loading ? <p className="log-state">Lecture de la reprise de contexte…</p> : null}

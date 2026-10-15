@@ -67,6 +67,13 @@ export function validateKnowledge(kind, { itemId, projectSlug, item }) {
   });
 }
 
+export function updateActionStatus({ projectSlug, itemId, statut }) {
+  return localApi("/api/knowledge/action/update-status", {
+    method: "POST",
+    body: JSON.stringify({ projectSlug, itemId, statut })
+  });
+}
+
 export async function loadLogPose(projectSlug = "") {
   const params = projectSlug ? `?projectSlug=${encodeURIComponent(projectSlug)}` : "";
   const payload = await localApi(`/api/log-pose${params}`);

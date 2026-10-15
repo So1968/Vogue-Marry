@@ -1145,7 +1145,10 @@ app.post("/api/water-seven/deposit", upload.single("document"), (req, res) => {
     const depositId = path.basename(depositDir);
 
     const safeOriginalName = safeSegment(req.file.originalname || "document") || "document";
-    const filePath = path.join(depositDir, safeOriginalName);
+    const storedName = ["fil_origine.json", "classement_valide.json"].includes(safeOriginalName)
+      ? `document_${safeOriginalName}`
+      : safeOriginalName;
+    const filePath = path.join(depositDir, storedName);
     fs.writeFileSync(filePath, req.file.buffer);
 
     const analysis = analyseWaterSevenDocument(req.file);

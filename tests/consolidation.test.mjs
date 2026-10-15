@@ -212,7 +212,7 @@ test("ouvrir une île affiche son Log Pose sans mélanger les projets", () => {
 test("le Pont limite le classement visible sans retirer les îles de la carte", () => {
   const app = read("src/App.jsx");
   assert.match(app, /priorities\.slice\(0, 3\)/u);
-  assert.match(app, /priorities\.length - 3/u);
+  assert.match(app, /pont-island-directory/u);
   assert.match(app, /<SeaMap projects=\{projects\} onOpenProject=\{onOpenProject\}/u);
 });
 

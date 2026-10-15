@@ -18,7 +18,7 @@ function LogPosePending({ logPose }) {
   );
 }
 
-export default function LogPoseView({ projectSlug = "", onOpen }) {
+export default function LogPoseView({ projectSlug = "", onOpen, onNavigate }) {
   const [logPose, setLogPose] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -89,12 +89,19 @@ export default function LogPoseView({ projectSlug = "", onOpen }) {
             <strong>{logPose.nextDirection}</strong>
             <p>{lastMeeting ? `${lastMeeting.title} · ${formatDate(lastMeeting.date)}` : "Aucune escale enregistrée."}</p>
             <LogPosePending logPose={logPose} />
+            {projectSlug && onNavigate ? (
+              <div className="log-pose-shortcuts">
+                <button type="button" onClick={() => onNavigate("manoeuvres")}>Consulter les actions</button>
+                <button type="button" onClick={() => onNavigate("journal")}>Revoir les escales</button>
+                <button type="button" onClick={() => onNavigate("cap")}>Voir le cap</button>
+              </div>
+            ) : null}
           </section>
         </>
       ) : null}
-      <button type="button" className="log-button" onClick={onOpen} disabled={!onOpen}>
+      {onOpen ? <button type="button" className="log-button" onClick={onOpen}>
         Voir les éléments à reprendre <ChevronRight size={18} />
-      </button>
+      </button> : null}
     </aside>
   );
 }

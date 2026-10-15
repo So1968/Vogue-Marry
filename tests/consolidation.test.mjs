@@ -204,6 +204,16 @@ test("le Coffre est un coffre au trésor et garde la validation du rangement", (
   assert.match(docs, /validateDocument\(\{ sourceId: document\.id, projectSlug \}\)/u);
 });
 
+test("le coffre accepte plusieurs fichiers et le glisser déposer", () => {
+ const docs = read("src/features/documents/DocumentsView.jsx");
+ assert.match(docs, /function handleDrop\(event\)/u);
+ assert.match(docs, /onDrop=\{handleDrop\}/u);
+ assert.match(docs, /type="file" multiple/u);
+ assert.match(docs, /for \(const file of selected\)/u);
+ assert.match(docs, /failures\.push/u);
+ assert.match(docs, /await refreshDocuments\(\)/u);
+});
+
 test("ouvrir une île affiche son Log Pose sans mélanger les projets", () => {
   const app = read("src/App.jsx");
   assert.match(app, /<LogPoseView key=\{project\.slug\} projectSlug=\{project\.slug\}/u);

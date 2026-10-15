@@ -170,6 +170,13 @@ test("les besoins de construction restent traçables et validables", () => {
   assert.match(app, /KnowledgeView kind="need"/u);
 });
 
+test("le formulaire Besoins modifie le champ need et non decision", () => {
+  const view = read("src/features/knowledge/KnowledgeView.jsx");
+  assert.match(view, /const textField = kind === "action" \? "action" : kind === "decision" \? "decision" : "need"/u);
+  assert.match(view, /<textarea value=\{draft\[textField\]\} onChange=\{\(event\) => updateField\(textField, event\.target\.value\)\}/u);
+  assert.doesNotMatch(view, /draft\[kind === "action" \? "action" : "decision"\]/u);
+});
+
 test("le Log Pose persiste et reprend les validations", () => {
   const memoryApi = read("backend/server.js");
   const localApi = read("src/lib/local-api.js");

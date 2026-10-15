@@ -26,11 +26,12 @@ import SearchView from "./features/search/SearchView.jsx";
 const MENU = [
   { id: "pont", label: "Pont", sublabel: "Vue d’ensemble", icon: ShipWheel },
   { id: "iles", label: "Îles", sublabel: "Vos projets", icon: Map },
+  { id: "vigie", label: "Vigie", sublabel: "Alertes de toutes les îles", icon: Bell },
   { id: "escales", label: "Escales", sublabel: "Réunions & comités", icon: Anchor },
   { id: "journal", label: "Journal", sublabel: "Comptes rendus", icon: BookOpen },
   { id: "besoins", label: "Besoins", sublabel: "Construction", icon: ClipboardList },
   { id: "coffre", label: "Coffre", sublabel: "Documents", icon: FolderOpen },
-  { id: "longuevue", label: "Longue-vue", sublabel: "Recherche & veille", icon: Telescope },
+  { id: "longuevue", label: "Longue-vue", sublabel: "Toutes les îles & recherche", icon: Telescope },
   { id: "manoeuvres", label: "Manœuvres", sublabel: "Actions à mener", icon: Sailboat },
   { id: "caps", label: "Caps validés", sublabel: "Décisions actées", icon: Compass }
 ];
@@ -214,7 +215,7 @@ button { font: inherit; }
 .treasure-dropzone strong { font-size: .93rem; }
 .treasure-dropzone span { color: #705438; }
 .treasure-dropzone.is-dragging { border-color: #1b718a; background: #fcebb1; box-shadow: 0 0 0 3px rgba(27,113,138,.3); }
-.documents-toolbar { margin-bottom: 18px; padding: 13px 15px; display: flex; align-items: end; justify-content: space-between; gap: 14px; color: #4d3b25; border: 1px solid #8d6431; border-radius: 9px; background: linear-gradient(180deg,#fff1ca,#e5c785); }
+.resume-banner { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 16px; background: #f1daaa; border-bottom: 1px solid #b88d51; font: .8rem Arial,sans-serif; }\n.resume-banner button, .vigie-list button { padding: 7px 10px; background: #214c5f; color: #fff1c9; border: 1px solid #a77e3c; border-radius: 5px; cursor: pointer; }\n.vigie-list { display: grid; gap: 10px; }\n.documents-toolbar { margin-bottom: 18px; padding: 13px 15px; display: flex; align-items: end; justify-content: space-between; gap: 14px; color: #4d3b25; border: 1px solid #8d6431; border-radius: 9px; background: linear-gradient(180deg,#fff1ca,#e5c785); }
 .documents-toolbar label { display: grid; gap: 5px; color: #6d542f; font: 700 .67rem Arial,sans-serif; letter-spacing: .04em; text-transform: uppercase; }
 .documents-toolbar select { min-width: 190px; padding: 8px 9px; color: #332715; border: 1px solid rgba(112,75,28,.34); border-radius: 6px; background: rgba(255,255,255,.65); font: .78rem Arial,sans-serif; }
 .document-upload-button { position: relative; padding: 9px 12px; color: #26313a !important; border: 1px solid #b7873d; border-radius: 6px; background: #efd79c; cursor: pointer; }
@@ -530,10 +531,11 @@ function StageHeader({ active, project }) {
   const titles = {
     pont: ["Pont du navire", "Reprendre le cap sur vos projets actifs"],
     iles: ["Mes îles", "Voir l’état et la direction de chaque projet"],
+    vigie: ["La Vigie", "Alertes et échéances de toutes les îles"],
     escales: ["Escales", "Préparer, vivre et transmettre les réunions"],
     journal: ["Journal de bord", "Conserver la mémoire longue du projet"],
     coffre: ["Coffre", "Ranger les documents et les preuves utiles"],
-    longuevue: ["Longue-vue", "Retrouver une information sans fouiller partout"],
+    longuevue: ["Longue-vue", "Explorer toutes les îles et leurs mémoires"],
     manoeuvres: ["Manœuvres", "Voir les actions à mener et les prochaines relances"],
     caps: ["Caps validés", "Retrouver les décisions déjà actées"]
   };
@@ -658,12 +660,61 @@ function PontView({ projects, onOpenProject }) {
   );
 }
 
+const RESUME_KEY = "vogue-marry:last-position:v1";
+const ISLAND_SECTIONS = new Set(["carte", "cap", "journal", "manoeuvres", "arsenal"]);
+
+function readLastPosition() {
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(RESUME_KEY) || "null");
+    return saved && typeof saved.slug === "string" && ISLAND_SECTIONS.has(saved.section)
+      ? saved : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveLastPosition(slug, section) {
+  if (!slug || !ISLAND_SECTIONS.has(section)) return;
+  try { window.localStorage.setItem(RESUME_KEY, JSON.stringify({ slug, section })); } catch { /* stockage optionnel */ }
+}
+
+function VigieView({ projects, onOpenProject }) {
+  const [actions, setActions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let current = true;
+    loadKnowledge("action").then(({ items }) => { if (current) setActions(items); })
+      .catch((cause) => { if (current) setError(cause.message || "La Vigie est indisponible."); })
+      .finally(() => { if (current) setLoading(false); });
+    return () => { current = false; };
+  }, []);
+  const today = new Date();
+  const alerts = rankProjects(projects, actions, today).filter((p) => p.overdue || p.upcoming || p.pending);
+  return (
+    <section className="generic-view vigie-view">
+      <div className="data-toolbar"><div><p className="data-kicker">La Vigie</p><h3>Îles à surveiller</h3><p>Retards, échéances dans les deux jours et validations en attente, même hors des trois priorités.</p></div></div>
+      {loading ? <p className="data-state">Lecture des alertes…</p> : null}
+      {error ? <p className="data-state error">{error}</p> : null}
+      {!loading && !error && !alerts.length ? <p className="data-state">Aucune alerte connue pour le moment.</p> : null}
+      {!loading && !error ? <div className="vigie-list">{alerts.map((p) => (
+        <article className="generic-card" key={p.slug}>
+          <h3>{p.name}</h3>
+          <p>{p.overdue ? `${p.overdue} action(s) en retard · ` : ""}{p.upcoming ? `${p.upcoming} échéance(s) proche(s) · ` : ""}{p.pending ? `${p.pending} à valider` : ""}</p>
+          <button type="button" onClick={() => onOpenProject(p)}>Rejoindre cette île →</button>
+        </article>
+      ))}</div> : null}
+    </section>
+  );
+}
+
 function IslandsView(props) {
   return <ProjectsView {...props} />;
 }
 
-function IslandProjectView({ project, onBack }) {
-  const [section, setSection] = useState("carte");
+function IslandProjectView({ project, onBack, initialSection = "carte", onPositionChange, onOpenManoeuvres }) {
+  const [section, setSection] = useState(initialSection);
+  useEffect(() => { onPositionChange(project.slug, section); }, [onPositionChange, project.slug, section]);
   const [projectActions, setProjectActions] = useState([]);
   const [actionsLoading, setActionsLoading] = useState(true);
   const [actionsError, setActionsError] = useState("");
@@ -741,6 +792,7 @@ function IslandProjectView({ project, onBack }) {
         <span className="world-kicker">{section === "carte" ? "La carte est le menu du projet" : `${project.island} · ${currentSection.label}`}</span>
       </div>
 
+      {section === "manoeuvres" ? <button type="button" className="back-to-islands" onClick={() => onOpenManoeuvres(project.slug)}>Gérer et valider les manœuvres →</button> : null}
       {section === "carte" ? (
         <div className="project-island-home">
           <LogPoseView key={project.slug} projectSlug={project.slug} onNavigate={setSection} />
@@ -840,6 +892,8 @@ function GenericView({ active, meetings, projects, loading, error, onSaved }) {
 export default function App() {
   const [active, setActive] = useState("pont");
   const [selectedProject, setSelectedProject] = useState(null);
+  const [lastPosition, setLastPosition] = useState(readLastPosition);
+  const [knowledgeProject, setKnowledgeProject] = useState("");
   const [projects, setProjects] = useState([]);
   const [meetings, setMeetings] = useState([]);
   const [loadingData, setLoadingData] = useState(true);
@@ -872,6 +926,11 @@ export default function App() {
     [projects, meetings]
   );
 
+  const onPositionChange = useCallback((slug, section) => {
+    saveLastPosition(slug, section);
+    setLastPosition({ slug, section });
+  }, []);
+
   const openProject = useCallback((project) => {
     const index = projects.findIndex((item) => item.slug === project.slug);
     setSelectedProject(makeProjectViewModel(project, meetings, Math.max(0, index)));
@@ -879,15 +938,19 @@ export default function App() {
 
   const handleSectionChange = (id) => {
     setSelectedProject(null);
+    setKnowledgeProject("");
     setActive(id);
   };
 
   const centralView = useMemo(() => {
-    if (selectedProject) return <IslandProjectView key={selectedProject.slug} project={selectedProject} onBack={() => setSelectedProject(null)} />;
+    if (selectedProject) return <IslandProjectView key={selectedProject.slug} project={selectedProject} initialSection={lastPosition?.slug === selectedProject.slug ? lastPosition.section : "carte"} onPositionChange={onPositionChange} onOpenManoeuvres={(slug) => { setKnowledgeProject(slug); setSelectedProject(null); setActive("manoeuvres"); }} onBack={() => setSelectedProject(null)} />;
     if (active === "pont") return <PontView projects={projectViewModels} meetings={meetings} onOpenProject={openProject} />;
+    if (active === "vigie") return <VigieView projects={projectViewModels} onOpenProject={openProject} />;
+    if (active === "longuevue") return <SearchView projects={projects} onOpenProject={openProject} />;
+    if (active === "manoeuvres" && knowledgeProject) return <KnowledgeView key={knowledgeProject} kind="action" projects={projects} initialProjectFilter={knowledgeProject} />;
     if (active === "iles") return <IslandsView projects={projects} meetings={meetings} loading={loadingData} error={dataError} onOpenProject={openProject} onSaved={refreshData} />;
     return <GenericView active={active} meetings={meetings} projects={projects} loading={loadingData} error={dataError} onSaved={refreshData} />;
-  }, [active, dataError, loadingData, meetings, openProject, projectViewModels, projects, refreshData, selectedProject]);
+  }, [active, dataError, loadingData, meetings, openProject, projectViewModels, projects, refreshData, selectedProject, lastPosition, onPositionChange, knowledgeProject]);
 
   const showShipLog = active === "pont" && !selectedProject;
 
@@ -904,7 +967,7 @@ export default function App() {
         />
         <section className="main-stage">
           <StageHeader active={active} project={selectedProject} />
-          <div className="stage-content">{centralView}</div>
+          <div className="stage-content">{!selectedProject && active === "pont" && lastPosition && projectViewModels.some((p) => p.slug === lastPosition.slug) ? <div className="resume-banner"><span>Dernière escale : {projectViewModels.find((p) => p.slug === lastPosition.slug)?.name}</span><button type="button" onClick={() => openProject(projectViewModels.find((p) => p.slug === lastPosition.slug))}>Reprendre où j’en étais →</button></div> : null}{centralView}</div>
         </section>
         {showShipLog ? <LogPoseView onOpen={() => setActive("manoeuvres")} /> : null}
       </main>

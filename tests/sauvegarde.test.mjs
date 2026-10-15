@@ -26,6 +26,8 @@ test("sauvegarde SHA256, contrôle, restauration et refus des écrasements", () 
     assert.equal(fs.readFileSync(path.join(restored, "01_PROJETS", "alpha", "texte.md"), "utf8"), "Mémoire de Mateo");
     assert.deepEqual(fs.readFileSync(path.join(restored, "01_PROJETS", "alpha", "audio.bin")), Buffer.from([0, 1, 42, 255]));
     assert.notEqual(run("restore", backup, restored).status, 0);
+    assert.notEqual(run("restore", backup, path.join(backup, "restauration-interdite")).status, 0);
+    assert.equal(fs.existsSync(path.join(backup, "restauration-interdite")), false);
     fs.writeFileSync(path.join(backup, "donnees", "01_PROJETS", "alpha", "texte.md"), "Altération");
     assert.notEqual(run("verify", backup).status, 0);
   } finally {

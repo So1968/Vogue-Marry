@@ -206,6 +206,15 @@ test("ouvrir une île affiche son Log Pose sans mélanger les projets", () => {
   assert.match(app, /onOpen=\{\(\) => setSection\("manoeuvres"\)\}/u);
 });
 
+test("une île affiche les actions de son projet et non les réunions ouvertes", () => {
+  const app = read("src/App.jsx");
+  assert.match(app, /loadKnowledge\("action", project\.slug\)/u);
+  assert.match(app, /projectActions\.map\(\(action\) =>/u);
+  assert.match(app, /action\.reviewStatus === "à valider"/u);
+  assert.match(app, /<IslandProjectView key=\{selectedProject\.slug\}/u);
+  assert.doesNotMatch(app, /openMeetings\.map\(\(meeting\) => \[meeting\.title, meeting\.status\]\)/u);
+});
+
 test("le nombre de participants ne force pas le nombre de voix Pyannote", () => {
   const server = read("backend/transcription-server-v6.js");
   assert.doesNotMatch(server, /args\.push\("--num-speakers"/u);

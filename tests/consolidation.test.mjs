@@ -194,6 +194,13 @@ test("le Log Pose persiste et reprend les validations", () => {
   assert.equal(exists("src/features/log-pose/LogPoseView.jsx"), true);
 });
 
+test("ouvrir une île affiche son Log Pose sans mélanger les projets", () => {
+  const app = read("src/App.jsx");
+  assert.match(app, /<LogPoseView key=\{project\.slug\} projectSlug=\{project\.slug\}/u);
+  assert.match(app, /className="project-island-home"/u);
+  assert.match(app, /onOpen=\{\(\) => setSection\("manoeuvres"\)\}/u);
+});
+
 test("le nombre de participants ne force pas le nombre de voix Pyannote", () => {
   const server = read("backend/transcription-server-v6.js");
   assert.doesNotMatch(server, /args\.push\("--num-speakers"/u);

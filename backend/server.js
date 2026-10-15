@@ -1120,9 +1120,8 @@ app.post("/api/water-seven/deposit", upload.single("document"), (req, res) => {
     if (!req.file) throw new Error("Aucun document reçu dans Water Seven.");
 
     ensureDir(WATER_SEVEN_ROOT);
-    const depositId = timestampForFile();
-    const depositDir = path.join(WATER_SEVEN_ROOT, depositId);
-    ensureDir(depositDir);
+    const depositDir = fs.mkdtempSync(path.join(WATER_SEVEN_ROOT, `${timestampForFile()}_`));
+    const depositId = path.basename(depositDir);
 
     const safeOriginalName = safeSegment(req.file.originalname || "document") || "document";
     const filePath = path.join(depositDir, safeOriginalName);

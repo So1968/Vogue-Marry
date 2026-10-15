@@ -203,7 +203,10 @@ test("ouvrir une île affiche son Log Pose sans mélanger les projets", () => {
   const logPose = read("src/features/log-pose/LogPoseView.jsx");
   assert.match(logPose, /Log Pose de l’île/u);
   assert.match(logPose, /Log Pose du Pont/u);
-  assert.match(app, /onOpen=\{\(\) => setSection\("manoeuvres"\)\}/u);
+  assert.match(app, /onNavigate=\{setSection\}/u);
+  assert.match(logPose, /onNavigate\("manoeuvres"\)/u);
+  assert.match(logPose, /onNavigate\("journal"\)/u);
+  assert.match(logPose, /onNavigate\("cap"\)/u);
 });
 
 test("une île affiche les actions de son projet et non les réunions ouvertes", () => {

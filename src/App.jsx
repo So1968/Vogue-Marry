@@ -203,6 +203,13 @@ button { font: inherit; }
 .meeting-report-actions button { padding: 7px 10px; color: #3f301a; border: 1px solid rgba(112,75,28,.28); border-radius: 6px; background: #efd79c; cursor: pointer; font: 700 .7rem Arial,sans-serif; }
 .meeting-report-actions button:disabled { opacity: .6; cursor: wait; }
 .meeting-report-actions span { color: #806334; font: .68rem Arial,sans-serif; }
+.treasure-heading { display: flex; align-items: center; gap: 17px; }
+.treasure-chest { position: relative; flex: 0 0 106px; width: 106px; height: 82px; filter: drop-shadow(3px 5px 2px rgba(34,19,8,.3)); }
+.treasure-chest-lid { position: absolute; top: 4px; left: 6px; width: 94px; height: 39px; border: 6px solid #c4933e; border-bottom: 8px solid #d6a84f; border-radius: 48px 48px 5px 5px / 32px 32px 5px 5px; background: repeating-linear-gradient(90deg,#80401b 0 27px,#a75f28 28px 31px,#713814 32px 34px); box-shadow: inset 0 5px 6px rgba(255,225,146,.25); }
+.treasure-chest-body { position: absolute; top: 40px; left: 4px; width: 98px; height: 39px; border: 6px solid #be8735; border-top: 0; border-radius: 0 0 11px 11px; background: repeating-linear-gradient(90deg,#803b18 0 26px,#a45c25 27px 30px,#70320f 31px 34px); box-shadow: inset 0 -8px 0 rgba(48,20,7,.25); }
+.treasure-chest-lock { position: absolute; top: -6px; left: 36px; width: 19px; height: 24px; border: 3px solid #e0b558; border-radius: 4px 4px 6px 6px; background: #c48c37; box-shadow: inset 0 0 0 3px #9c6726; }
+.treasure-chest-lock::after { content: ""; position: absolute; left: 5px; top: 7px; width: 3px; height: 7px; border-radius: 50%; background: #4b2b15; }
+.treasure-heading .data-count { white-space: nowrap; }
 .documents-toolbar { margin-bottom: 18px; padding: 13px 15px; display: flex; align-items: end; justify-content: space-between; gap: 14px; color: #4d3b25; border: 1px solid #8d6431; border-radius: 9px; background: linear-gradient(180deg,#fff1ca,#e5c785); }
 .documents-toolbar label { display: grid; gap: 5px; color: #6d542f; font: 700 .67rem Arial,sans-serif; letter-spacing: .04em; text-transform: uppercase; }
 .documents-toolbar select { min-width: 190px; padding: 8px 9px; color: #332715; border: 1px solid rgba(112,75,28,.34); border-radius: 6px; background: rgba(255,255,255,.65); font: .78rem Arial,sans-serif; }

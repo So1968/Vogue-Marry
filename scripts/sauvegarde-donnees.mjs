@@ -62,7 +62,21 @@ function verify(backup) {
   return manifest;
 }
 try {
-  if (command === "backup") {
+  if (command === "backup-next") {
+    if (!first || !second) fail("Usage : backup-next <source> <dossier-parent>");
+    const source = path.resolve(first);
+    const parent = path.resolve(second);
+    if (!fs.statSync(source).isDirectory()) fail("Source introuvable.");
+    if (parent === source || parent.startsWith(source + path.sep)) fail("Destination à placer hors de la source.");
+    const files = inspect(source);
+    fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
+    const prefix = new Date().toISOString().replace(/[:.]/g, "-");
+    const destination = fs.mkdtempSync(path.join(parent, `sauvegarde_${prefix}_`));
+    fs.cpSync(source, path.join(destination, "donnees"), { recursive: true, errorOnExist: true, force: false, dereference: false });
+    fs.writeFileSync(path.join(destination, "manifest.json"), JSON.stringify({ version: 1, files }, null, 2));
+    verify(destination);
+    console.log(`Sauvegarde vérifiée : ${files.length} fichier(s). ${destination}`);
+  } else if (command === "backup") {
     const source = path.resolve(first || sourceDefault);
     const destination = second && path.resolve(second);
     if (!destination) fail("Usage : backup [source] <destination-nouvelle>");
@@ -92,7 +106,7 @@ try {
     fs.cpSync(path.join(backup, "donnees"), destination, { recursive: true, force: false, errorOnExist: true });
     if (JSON.stringify(inspect(destination)) !== JSON.stringify(manifest.files)) fail("Vérification de restauration échouée.");
     console.log(`Restauration vérifiée : ${manifest.files.length} fichier(s). ${destination}`);
-  } else fail("Commandes : backup, verify, restore");
+  } else fail("Commandes : backup-next, backup, verify, restore");
 } catch (error) {
   console.error(`ERREUR : ${error.message}`);
   process.exitCode = 1;

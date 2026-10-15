@@ -215,7 +215,11 @@ button { font: inherit; }
 .treasure-dropzone strong { font-size: .93rem; }
 .treasure-dropzone span { color: #705438; }
 .treasure-dropzone.is-dragging { border-color: #1b718a; background: #fcebb1; box-shadow: 0 0 0 3px rgba(27,113,138,.3); }
-.resume-banner { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 16px; background: #f1daaa; border-bottom: 1px solid #b88d51; font: .8rem Arial,sans-serif; }\n.resume-banner button, .vigie-list button { padding: 7px 10px; background: #214c5f; color: #fff1c9; border: 1px solid #a77e3c; border-radius: 5px; cursor: pointer; }\n.vigie-list { display: grid; gap: 10px; }\n.documents-toolbar { margin-bottom: 18px; padding: 13px 15px; display: flex; align-items: end; justify-content: space-between; gap: 14px; color: #4d3b25; border: 1px solid #8d6431; border-radius: 9px; background: linear-gradient(180deg,#fff1ca,#e5c785); }
+.resume-banner { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 16px; background: #f1daaa; border-bottom: 1px solid #b88d51; font: .8rem Arial,sans-serif; }\n.resume-banner button, .vigie-list button { padding: 7px 10px; background: #214c5f; color: #fff1c9; border: 1px solid #a77e3c; border-radius: 5px; cursor: pointer; }\n.vigie-list { display: grid; gap: 10px; }\n.knowledge-status-change { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 9px; margin-top: 8px; }
+.knowledge-status-change label { display: grid; gap: 4px; }
+.knowledge-status-change select, .knowledge-status-change button { padding: 7px; border: 1px solid #9c7c49; border-radius: 6px; background: #f4e3bc; cursor: pointer; }
+.knowledge-status-change button:disabled { cursor: default; opacity: .55; }
+.documents-toolbar { margin-bottom: 18px; padding: 13px 15px; display: flex; align-items: end; justify-content: space-between; gap: 14px; color: #4d3b25; border: 1px solid #8d6431; border-radius: 9px; background: linear-gradient(180deg,#fff1ca,#e5c785); }
 .documents-toolbar label { display: grid; gap: 5px; color: #6d542f; font: 700 .67rem Arial,sans-serif; letter-spacing: .04em; text-transform: uppercase; }
 .documents-toolbar select { min-width: 190px; padding: 8px 9px; color: #332715; border: 1px solid rgba(112,75,28,.34); border-radius: 6px; background: rgba(255,255,255,.65); font: .78rem Arial,sans-serif; }
 .document-upload-button { position: relative; padding: 9px 12px; color: #26313a !important; border: 1px solid #b7873d; border-radius: 6px; background: #efd79c; cursor: pointer; }

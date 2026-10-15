@@ -216,6 +216,17 @@ test("le Pont limite le classement visible sans retirer les îles de la carte", 
   assert.match(app, /<SeaMap projects=\{projects\} onOpenProject=\{onOpenProject\}/u);
 });
 
+test("le Pont conserve toutes les îles et leurs alertes hors top trois", () => {
+  const app = read("src/App.jsx");
+  assert.match(app, /priorities\.slice\(0, 3\)/u);
+  assert.match(app, /alerts = priorities\.filter/u);
+  assert.match(app, /alerts\.map\(\(project\) =>/u);
+  assert.match(app, /onClick=\{\(\) => onOpenProject\(project\)\}/u);
+  assert.match(app, /displayed = priorities\.filter/u);
+  assert.match(app, /pont-island-directory/u);
+  assert.match(app, /Voir les \$\{priorities\.length\} îles/u);
+});
+
 test("une île affiche les actions de son projet et non les réunions ouvertes", () => {
   const app = read("src/App.jsx");
   assert.match(app, /loadKnowledge\("action", project\.slug\)/u);

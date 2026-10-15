@@ -1,55 +1,76 @@
 # Vogue Merry
 
-## Statut du dépôt
+**Vogue Merry** est l’outil de mémoire projet d’Azoth Studio : il transforme réunions, audios, notes, documents, décisions et actions en une mémoire navigable.
 
-Ce dépôt est le dépôt applicatif de **Vogue Merry**.
+> On garde le moteur. On transforme l’expérience.
 
-Vogue Merry est le produit unique. Les anciens noms ou libellés techniques doivent être progressivement remplacés par le vocabulaire Vogue Merry.
+## État du dépôt
 
-## Produit
+- `main` est le tronc stable et la seule branche de développement à utiliser désormais.
+- Les anciennes branches de travail ont été rassemblées sur le même état que `main`.
+- `archive/rustines-esthetiques-20260731` reste volontairement séparée : c’est une archive, pas une branche à fusionner.
+- Les données personnelles et projets réels restent hors de Git, dans `~/VOGUE-MERRY-DONNEES`.
 
-**Vogue Merry** est un outil de mémoire projet inspiré d’un univers de navigation maritime et de manga d’aventure.
-
-Il sert à transformer les réunions, audios, notes, transcriptions, documents et décisions dispersés en mémoire projet navigable.
-
-Objectif : retrouver rapidement le projet, l’escale, la décision, le document, l’action à faire et le prochain cap.
-
-## Logique fonctionnelle à préserver
-
-L’outil ne doit pas devenir seulement une page décorative. L’univers maritime / manga d’aventure doit servir le fonctionnement de l’outil.
-
-Organisation cible :
+## Parcours produit
 
 1. **Pont du navire** : vue globale.
 2. **Mes îles** : projets.
 3. **Carte de l’île** : vue générale d’un projet.
 4. **Escales** : réunions et points projet.
-5. **Traces audio** : transcriptions et sources audio.
-6. **Journal de bord** : comptes rendus, documents de travail et synthèses.
+5. **Traces audio** : sources et transcriptions.
+6. **Journal de bord** : comptes rendus et documents de travail.
 7. **Coffre** : documents liés au projet.
 8. **Équipage** : personnes et rôles.
 9. **Manœuvres** : actions à faire.
 10. **Caps validés** : décisions.
 11. **Longue-vue** : recherche dans la mémoire du projet.
-12. **Log Pose** : synthèse du cap, prochaine direction, éléments importants à retrouver.
+12. **Log Pose** : synthèse du cap et reprise de contexte.
 
-## Vocabulaire fonctionnel
+Cycle documentaire : **source → travail → validé → historique**.
 
-- **Source d’escale** : informations de base, audio, marqueurs, matière brute, transcription.
-- **Document de travail** : version modifiable issue d’une escale.
-- **Version validée** : version figée qui sert de référence.
-- **Versions précédentes** : sauvegardes automatiques permettant de revenir en arrière en cas d’erreur.
+## Architecture active
 
-Cycle : source → travail → validé → historique.
+### Frontend
+
+React + Vite.
+
+### Services locaux
+
+- `backend/server.js` : mémoire projet / API locale principale, port 8010.
+- `backend/transcription-server-v6.js` : transcription, diarisation et confirmation des interlocuteurs, port 8011.
+- `backend/local_transcribe.py` : Faster-Whisper.
+- `backend/local_diarize.py` : Pyannote.
+
+Les services locaux écoutent uniquement sur `127.0.0.1`. Le port 8012 et les anciens moteurs V1 à V5 ont été retirés du code actif.
+
+## Démarrage
+
+```bash
+npm ci
+npm run transcription:setup
+npm run dev:all
+```
+
+Interface de développement : `http://localhost:5173`.
+
+## Contrôles
+
+```bash
+npm test
+npm run build
+npm audit --audit-level=high
+```
+
+La CI GitHub exécute automatiquement installation verrouillée, contrôles de syntaxe Node/Python, tests, audit des dépendances et build.
+
+## Transcription
+
+Le mode local utilise Faster-Whisper et, lorsqu’il est configuré, Pyannote. Le mode de contrôle renforcé peut utiliser OpenAI, uniquement après consentement explicite dans l’interface.
+
+Les clés et jetons restent locaux et ne doivent jamais être ajoutés au dépôt.
 
 ## Règle de développement
 
-Toute évolution graphique Vogue Merry doit conserver le moteur fonctionnel existant : projets, escales, sources, documents de travail, validation, historique, recherche, export local et continuité de la mémoire projet.
+Toute évolution doit préserver le moteur fonctionnel existant : projets, escales, sources, documents de travail, validation, historique, recherche, export local et continuité de la mémoire projet.
 
-> On garde le moteur. On transforme l’expérience.
-
-## Lien avec Azoth Studio
-
-Dans **Azoth Studio**, Vogue Merry est le produit.
-
-Dossier produit associé : `02_PRODUITS/VOGUE_MERRY`.
+Dans **Azoth Studio**, le dossier produit associé est `02_PRODUITS/VOGUE_MERRY`.

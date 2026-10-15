@@ -1,9 +1,9 @@
-name: Consolidation Vogue Marry
+name: Vogue Marry CI
 
 on:
   push:
     branches:
-      - consolidation/vogue-marry-2026-09
+      - main
   pull_request:
     branches:
       - main

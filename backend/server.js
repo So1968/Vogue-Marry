@@ -1650,6 +1650,33 @@ app.post("/api/knowledge/:kind/validate", (req, res) => {
   }
 });
 
+app.post("/api/knowledge/action/update-status", (req, res) => {
+  try {
+    const projectSlug = safeSegment(req.body.projectSlug);
+    const itemId = String(req.body.itemId || "").trim();
+    const statut = String(req.body.statut || "").trim();
+    if (!projectSlug || !itemId || !statut || statut.length > 100) throw new Error("Île, action et statut valides requis.");
+    const projectDir = safePathInside(PROJECTS_ROOT, projectSlug);
+    if (!fs.existsSync(projectDir)) throw new Error("Île introuvable.");
+
+    const accepted = readKnowledgeEntries(projectSlug, "action");
+    const index = accepted.findIndex((item) => item.id === itemId);
+    if (index < 0) throw new Error("Action non validée ou introuvable.");
+    const config = KNOWLEDGE_CONFIG.action;
+    const jsonPath = safePathInside(PROJECTS_ROOT, projectSlug, config.folder, config.fileName);
+    const markdownPath = safePathInside(PROJECTS_ROOT, projectSlug, config.folder, config.markdownName);
+    createFileVersion(jsonPath, "avant_statut");
+    createFileVersion(markdownPath, "avant_statut");
+    const updated = { ...accepted[index], statut, updatedAt: new Date().toISOString() };
+    accepted[index] = updated;
+    writeKnowledgeEntries(projectSlug, "action", accepted);
+    syncLogPose(projectSlug);
+    res.json({ status: "ok", item: updated });
+  } catch (error) {
+    res.status(400).json({ error: error.message || "Impossible de mettre à jour cette manœuvre." });
+  }
+});
+
 function walkFiles(dirPath, files = [], { includeHistory = false } = {}) {
   if (!fs.existsSync(dirPath) || fs.lstatSync(dirPath).isSymbolicLink()) return files;
 

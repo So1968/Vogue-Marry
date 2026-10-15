@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import http from "node:http";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -117,10 +118,15 @@ test("les API locales refusent un Host étranger", async () => {
   ]) {
     await withServer(script, port, async () => {
       const url = `http://127.0.0.1:${port}/api/${healthPath}`;
-      const rejected = await fetch(url, { headers: { Host: "site-externe.example" } });
-      assert.equal(rejected.status, 403);
-      const accepted = await fetch(url, { headers: { Host: `localhost:${port}` } });
-      assert.equal(accepted.status, 200);
+      const requestWithHost = (host) => new Promise((resolve, reject) => {
+        const request = http.get(url, { headers: { host } }, (response) => {
+          response.resume();
+          response.on("end", () => resolve(response.statusCode));
+        });
+        request.on("error", reject);
+      });
+      assert.equal(await requestWithHost("site-externe.example"), 403);
+      assert.equal(await requestWithHost(`localhost:${port}`), 200);
     }, healthPath);
   }
 });

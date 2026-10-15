@@ -581,45 +581,43 @@ function SeaMap({ projects, onOpenProject }) {
   );
 }
 
-function PriorityBoard({ meetings }) {
-  const priorities = meetings
-    .filter((meeting) => meeting.status !== "Validé")
-    .slice(0, 3)
-    .map((meeting, index) => ({
-      rank: index + 1,
-      project: meeting.title,
-      island: meeting.projectName,
-      reason: meeting.status,
-      action: meeting.hasAudio && !meeting.hasRawNotes ? "Transcrire et rattacher l’audio." : "Relire et compléter le journal.",
-      tone: meeting.status === "Audio à transcrire" ? "red" : "blue"
-    }));
+function PriorityBoard({ projects }) {
+  // Classement transparent : d'abord les escales ouvertes, puis leur date la plus récente.
+  const priorities = [...projects]
+    .map((project) => ({
+      ...project,
+      openCount: (project.meetings || []).filter((meeting) => meeting.status !== "Validé").length,
+      latestDate: project.meetings?.[0]?.date || ""
+    }))
+    .sort((a, b) => b.openCount - a.openCount || String(b.latestDate).localeCompare(String(a.latestDate)) || a.name.localeCompare(b.name));
+
   return (
-    <section className="priorities-board" aria-label="Priorités maintenant">
+    <section className="priorities-board" aria-label="Classement des îles">
       <div className="priorities-heading">
-        <strong>Priorités maintenant</strong>
-        <span>{priorities.length ? `${priorities.length} escale${priorities.length > 1 ? "s" : ""} à regarder avant le reste` : "Aucune priorité ouverte"}</span>
+        <strong>Vue d’ensemble · Classement des îles</strong>
+        <span>Par nombre d’escales à traiter, puis par date de dernière escale</span>
       </div>
       <div className="priorities-grid">
-        {priorities.map((priority) => (
-          <article className={`priority-card ${priority.tone}`} key={priority.project}>
-            <span className="priority-rank">{priority.rank}</span>
+        {priorities.map((project, index) => (
+          <article className={`priority-card ${project.tone}`} key={project.slug}>
+            <span className="priority-rank">{index + 1}</span>
             <div>
-              <small>{priority.island}</small>
-              <strong>{priority.project}</strong>
-              <p>{priority.reason} · <b>{priority.action}</b></p>
+              <small>{project.openCount} escale{project.openCount > 1 ? "s" : ""} à traiter</small>
+              <strong>{project.name}</strong>
+              <p>{project.next}</p>
             </div>
           </article>
         ))}
-        {!priorities.length ? <p className="data-state">Toutes les escales connues sont validées, ou aucune escale n’est encore enregistrée.</p> : null}
+        {!priorities.length ? <p className="data-state">Aucune île enregistrée pour le moment.</p> : null}
       </div>
     </section>
   );
 }
 
-function PontView({ projects, meetings, onOpenProject }) {
+function PontView({ projects, onOpenProject }) {
   return (
     <section className="pont-view">
-      <PriorityBoard meetings={meetings} />
+      <PriorityBoard projects={projects} />
       <SeaMap projects={projects} onOpenProject={onOpenProject} />
     </section>
   );

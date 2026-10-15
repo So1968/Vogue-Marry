@@ -381,6 +381,30 @@ test("API Coffre : propose puis valide le classement d’un document local", asy
   });
 });
 
+test("API Coffre : deux dépôts immédiats ne s'écrasent pas", async () => {
+  await withServer("backend/server.js", 8010, async (home) => {
+    const deposit = async (contents) => {
+      const form = new FormData();
+      form.append("document", new Blob([contents], { type: "text/plain" }), "note.txt");
+      const response = await fetch("http://127.0.0.1:8010/api/water-seven/deposit", {
+        method: "POST",
+        headers: { Origin: "http://localhost:5173" },
+        body: form
+      });
+      assert.equal(response.status, 201);
+      return (await response.json()).deposit;
+    };
+    const [first, second] = await Promise.all([deposit("premier document"), deposit("deuxième document")]);
+    assert.notEqual(first.id, second.id);
+    const root = path.join(home, "VOGUE-MERRY-DONNEES", "00_WATER_SEVEN_PORT_ENTREE");
+    assert.equal(fs.readFileSync(path.join(root, first.id, "note.txt"), "utf8"), "premier document");
+    assert.equal(fs.readFileSync(path.join(root, second.id, "note.txt"), "utf8"), "deuxième document");
+    const response = await fetch("http://127.0.0.1:8010/api/documents");
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).pendingCount, 2);
+  });
+});
+
 test("API mémoire : extrait puis valide actions et décisions des journaux", async () => {
   await withServer("backend/server.js", 8010, async (home) => {
     const requestOptions = {

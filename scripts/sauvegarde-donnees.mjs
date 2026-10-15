@@ -84,7 +84,8 @@ try {
     if (!first || !second) fail("Usage : restore <dossier-sauvegarde> <destination-nouvelle>");
     const backup = path.resolve(first);
     const destination = path.resolve(second);
-    if (destination === sourceDefault) fail("Restauration directe sur les données actives interdite.");
+    if (destination === sourceDefault || destination.startsWith(sourceDefault + path.sep)) fail("Restauration dans les données actives interdite.");
+    if (destination === backup || destination.startsWith(backup + path.sep)) fail("Restauration dans la sauvegarde interdite.");
     const manifest = verify(backup);
     ensureNestedParent(path.dirname(destination));
     ensureNewDirectory(destination);

@@ -452,6 +452,29 @@ test("API Coffre : deux dépôts immédiats ne s'écrasent pas", async () => {
   });
 });
 
+test("API Coffre : les noms réservés ne détruisent pas les fichiers déposés", async () => {
+  await withServer("backend/server.js", 8010, async (home) => {
+    for (const name of ["fil_origine.json", "classement_valide.json"]) {
+      const payloadText = `DOCUMENT_UTILISATEUR_${name}`;
+      const form = new FormData();
+      form.append("document", new Blob([payloadText], { type: "application/json" }), name);
+      const response = await fetch("http://127.0.0.1:8010/api/water-seven/deposit", {
+        method: "POST",
+        headers: { Origin: "http://localhost:5173" },
+        body: form
+      });
+      assert.equal(response.status, 201);
+      const payload = (await response.json()).deposit;
+      const folder = path.join(home, "VOGUE-MERRY-DONNEES", "00_WATER_SEVEN_PORT_ENTREE", payload.id);
+      assert.equal(fs.readFileSync(path.join(folder, `document_${name}`), "utf8"), payloadText);
+      assert.equal(JSON.parse(fs.readFileSync(path.join(folder, "fil_origine.json"), "utf8")).id, payload.id);
+    }
+    const listing = await fetch("http://127.0.0.1:8010/api/documents");
+    assert.equal(listing.status, 200);
+    assert.equal((await listing.json()).pendingCount, 2);
+  });
+});
+
 test("API mémoire : extrait puis valide actions et décisions des journaux", async () => {
   await withServer("backend/server.js", 8010, async (home) => {
     const requestOptions = {

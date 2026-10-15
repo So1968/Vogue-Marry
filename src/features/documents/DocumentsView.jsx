@@ -129,11 +129,11 @@ export default function DocumentsView({ projects = [] }) {
     <section className="generic-view documents-view">
       <div className="data-toolbar">
         <div>
-          <p className="data-kicker">Coffre</p>
-          <h3>Documents locaux</h3>
+          <p className="data-kicker">Coffre au trésor</p>
+          <h3>Le Coffre aux trésors</h3>
           <p>Les fichiers restent sur cet ordinateur. Le classement proposé est toujours validé par vous.</p>
         </div>
-        <span className="data-count">{pendingCount ? `${pendingCount} à valider` : documents.length}</span>
+        <div className="treasure-heading"><div className="treasure-chest" aria-hidden="true"><div className="treasure-chest-lid" /><div className="treasure-chest-body"><span className="treasure-chest-lock" /></div></div><span className="data-count">{pendingCount ? `${pendingCount} à valider` : documents.length}</span></div>
       </div>
 
       <div className="documents-toolbar">

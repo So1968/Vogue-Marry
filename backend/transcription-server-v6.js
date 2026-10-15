@@ -731,6 +731,7 @@ async function processJob(jobId, sourcePath, originalName, mode, context, partic
       text: structured.segments.map((segment) => `${segment.speaker} — ${segment.text}`).join("\n")
     };
 
+    persistTranscriptionToMeeting(result);
     writeJson(path.join(jobDir(jobId), "transcription.json"), result);
     fs.writeFileSync(
       path.join(jobDir(jobId), "transcription.md"),
@@ -762,7 +763,8 @@ async function processJob(jobId, sourcePath, originalName, mode, context, partic
       detectedSpeakerCount: structured.detectedSpeakerCount,
       estimatedCostUsd: verification?.estimatedCostUsd || 0,
       warnings,
-      resultReady: true
+      resultReady: true,
+      persistedToMeeting: result.persistedToMeeting
     });
   } catch (error) {
     writeStatus(jobId, { state: "error", message: error.message || "Échec de la transcription.", progress: 0 });
@@ -873,6 +875,99 @@ function buildCorrectedTranscriptMarkdown(result) {
   return `${lines.join("\n").trim()}\n`;
 }
 
+const TRANSCRIPTION_SECTION_START = "<!-- VOGUE_MARRY_TRANSCRIPTION_START -->";
+const TRANSCRIPTION_SECTION_END = "<!-- VOGUE_MARRY_TRANSCRIPTION_END -->";
+
+function buildJournalTranscriptionSection(result) {
+  const lines = [
+    TRANSCRIPTION_SECTION_START,
+    "## Transcription automatique V6",
+    "",
+    `- Job : ${result.jobId || ""}`,
+    `- Fichier audio : ${result.originalName || ""}`,
+    `- Mode : ${result.mode === "high" ? "Contrôle renforcé" : "Local renforcé"}`,
+    result.localModel ? `- Modèle local : Faster-Whisper ${result.localModel}` : null,
+    result.speakerConfirmationsUpdatedAt ? `- Interlocuteurs confirmés : ${result.speakerConfirmationsUpdatedAt}` : null,
+    "",
+    "### Interventions",
+    ""
+  ].filter(Boolean);
+
+  for (const segment of result.segments || []) {
+    lines.push(`[${formatClock(segment.start)}] ${segment.speaker || "Intervenant"} — ${segment.text || ""}`);
+    lines.push("");
+  }
+
+  if (result.unresolvedSpeakers?.length) {
+    lines.push("### Interlocuteurs à confirmer", "");
+    for (const speaker of result.unresolvedSpeakers) lines.push(`- ${speaker}`);
+    lines.push("");
+  }
+
+  if (result.warnings?.length) {
+    lines.push("### Points de vigilance", "");
+    for (const warning of result.warnings) lines.push(`- ${warning}`);
+    lines.push("");
+  }
+
+  lines.push(TRANSCRIPTION_SECTION_END);
+  return `${lines.join("\n").trim()}\n`;
+}
+
+function replaceManagedJournalSection(content, section) {
+  const start = content.indexOf(TRANSCRIPTION_SECTION_START);
+  const end = content.indexOf(TRANSCRIPTION_SECTION_END);
+  if (start >= 0 && end > start) {
+    const before = content.slice(0, start).trimEnd();
+    const after = content.slice(end + TRANSCRIPTION_SECTION_END.length).trimStart();
+    return `${[before, section.trim(), after].filter(Boolean).join("\n\n")}\n`;
+  }
+  return `${content.trimEnd()}\n\n${section.trim()}\n`;
+}
+
+function persistTranscriptionToMeeting(result) {
+  result.persistedToMeeting = false;
+  const meetingId = result.meeting?.id || "";
+  const dataPath = speakerMeetingDataPath(meetingId);
+  if (!dataPath || !fs.existsSync(dataPath)) return false;
+
+  try {
+    const meetingDir = path.dirname(dataPath);
+    const transcriptionJsonPath = path.join(meetingDir, "transcription_v6.json");
+    const transcriptionMarkdownPath = path.join(meetingDir, "transcription_v6.md");
+    const journalPath = path.join(meetingDir, "journal_de_bord_exporte.md");
+
+    writeJson(transcriptionJsonPath, result);
+    fs.writeFileSync(transcriptionMarkdownPath, buildCorrectedTranscriptMarkdown(result), "utf8");
+
+    const data = readJsonIfExists(dataPath) || {};
+    data.transcription = {
+      jobId: result.jobId,
+      status: "terminee",
+      updatedAt: result.speakerConfirmationsUpdatedAt || timestamp(),
+      mode: result.mode,
+      resultFileName: path.basename(transcriptionJsonPath),
+      markdownFileName: path.basename(transcriptionMarkdownPath),
+      unresolvedSpeakers: result.unresolvedSpeakers || []
+    };
+    writeJson(dataPath, data);
+
+    if (fs.existsSync(journalPath)) {
+      const currentJournal = fs.readFileSync(journalPath, "utf8");
+      fs.writeFileSync(journalPath, replaceManagedJournalSection(currentJournal, buildJournalTranscriptionSection(result)), "utf8");
+    }
+
+    result.persistedToMeeting = true;
+    return true;
+  } catch (error) {
+    result.warnings = Array.from(new Set([
+      ...(result.warnings || []),
+      `Journal de bord non mis à jour : ${error.message || "erreur locale"}`
+    ]));
+    return false;
+  }
+}
+
 function persistSpeakerMappingToMeeting(result, status, mapping, updatedAt) {
   const meetingId = result.meeting?.id || status?.meetingId || "";
   const dataPath = speakerMeetingDataPath(meetingId);
@@ -931,11 +1026,13 @@ app.post("/api/transcription/:jobId/speakers", (req, res) => {
     fs.writeFileSync(path.join(dir, "transcription.md"), buildCorrectedTranscriptMarkdown(result), "utf8");
 
     const persistedToMeeting = persistSpeakerMappingToMeeting(result, status, mergedOverrides, updatedAt);
+    persistTranscriptionToMeeting(result);
     writeJson(jobStatusPath, {
       ...status,
       jobId: result.jobId,
       speakerConfirmationsUpdatedAt: updatedAt,
       speakerConfirmationsPersistedToMeeting: persistedToMeeting,
+      persistedToMeeting: result.persistedToMeeting,
       updatedAt
     });
 

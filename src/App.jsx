@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Anchor,
   Bell,
   BookOpen,
+  ClipboardList,
   ChevronRight,
   Compass,
   FolderOpen,
@@ -12,181 +13,26 @@ import {
   ShipWheel,
   Telescope
 } from "lucide-react";
+import { loadInbox, loadProjects } from "./lib/local-api.js";
+import MeetingsView from "./features/meetings/MeetingsView.jsx";
+import DocumentsView from "./features/documents/DocumentsView.jsx";
+import KnowledgeView from "./features/knowledge/KnowledgeView.jsx";
+import LogPoseView from "./features/log-pose/LogPoseView.jsx";
+import ProjectsView from "./features/projects/ProjectsView.jsx";
+import { makeProjectViewModel } from "./features/projects/project-utils.js";
+import SearchView from "./features/search/SearchView.jsx";
 
 const MENU = [
   { id: "pont", label: "Pont", sublabel: "Vue d’ensemble", icon: ShipWheel },
   { id: "iles", label: "Îles", sublabel: "Vos projets", icon: Map },
-  { id: "escales", label: "Escales", sublabel: "Réunions & comités", icon: Anchor, count: 5 },
-  { id: "journal", label: "Journal", sublabel: "Comptes rendus", icon: BookOpen, count: 8 },
-  { id: "coffre", label: "Coffre", sublabel: "Documents", icon: FolderOpen, count: 23 },
+  { id: "escales", label: "Escales", sublabel: "Réunions & comités", icon: Anchor },
+  { id: "journal", label: "Journal", sublabel: "Comptes rendus", icon: BookOpen },
+  { id: "besoins", label: "Besoins", sublabel: "Construction", icon: ClipboardList },
+  { id: "coffre", label: "Coffre", sublabel: "Documents", icon: FolderOpen },
   { id: "longuevue", label: "Longue-vue", sublabel: "Recherche & veille", icon: Telescope },
   { id: "manoeuvres", label: "Manœuvres", sublabel: "Actions à mener", icon: Sailboat },
   { id: "caps", label: "Caps validés", sublabel: "Décisions actées", icon: Compass }
 ];
-
-const PROJECTS = [
-  { name: "Phare d’Émeraude", detail: "Déploiement EPM", status: "En cours", tone: "green", kind: "lighthouse", x: 19, y: 31 },
-  { name: "Baie des Alizés", detail: "Reporting P&L", status: "En cours", tone: "green", kind: "palms", x: 51, y: 27 },
-  { name: "Atoll des Brumes", detail: "Migration modèle", status: "À reprendre", tone: "blue", kind: "mountain", x: 82, y: 49 },
-  { name: "Île des Courants", detail: "Budget & Forecast", status: "Priorité", tone: "red", kind: "fortress", x: 54, y: 68 },
-  { name: "Lagune des Archives", detail: "Référentiels & données", status: "En cours", tone: "gold", kind: "lagoon", x: 22, y: 67 }
-];
-
-const ISLAND_PROJECTS = [
-  {
-    island: "Phare d’Émeraude",
-    name: "Déploiement EPM — Client Horizon",
-    status: "En cours",
-    tone: "green",
-    cap: "Cadrer et sécuriser le modèle Budget / Forecast avant la recette métier.",
-    next: "Préparer l’atelier DAF sur les règles de gestion et le workflow de validation."
-  },
-  {
-    island: "Baie des Alizés",
-    name: "Refonte reporting P&L",
-    status: "En cours",
-    tone: "green",
-    cap: "Aligner le reporting réel, budget et forecast sur un référentiel commun.",
-    next: "Valider la structure du P&L avec le contrôle de gestion."
-  },
-  {
-    island: "Atoll des Brumes",
-    name: "Migration modèle Planning",
-    status: "À reprendre",
-    tone: "blue",
-    cap: "Reprendre les règles de calcul et fiabiliser les flux de données entrants.",
-    next: "Identifier les écarts entre l’ancien modèle et la cible."
-  },
-  {
-    island: "Île des Courants",
-    name: "Campagne Budget 2027",
-    status: "Priorité",
-    tone: "red",
-    cap: "Sécuriser le calendrier budgétaire, les hypothèses et les contributeurs.",
-    next: "Arbitrer les règles de saisie avant ouverture de la campagne."
-  }
-];
-
-const GLOBAL_PRIORITIES = [
-  {
-    rank: 1,
-    project: "Campagne Budget 2027",
-    island: "Île des Courants",
-    reason: "Ouverture de campagne à sécuriser",
-    action: "Arbitrer les règles de saisie et de validation.",
-    tone: "red"
-  },
-  {
-    rank: 2,
-    project: "Migration modèle Planning",
-    island: "Atoll des Brumes",
-    reason: "Écarts de calcul à qualifier",
-    action: "Comparer les règles source et cible.",
-    tone: "blue"
-  },
-  {
-    rank: 3,
-    project: "Déploiement EPM — Client Horizon",
-    island: "Phare d’Émeraude",
-    reason: "Atelier DAF à préparer",
-    action: "Consolider les règles de gestion Budget / Forecast.",
-    tone: "green"
-  }
-];
-
-const PILOT_WORLD = {
-  carte: {
-    label: "Carte de l’île",
-    subtitle: "La photographie actuelle du projet : où nous sommes aujourd’hui",
-    items: [
-      ["Étape actuelle", "Cadrage fonctionnel avancé. Le modèle Budget / Forecast est défini ; les derniers arbitrages précèdent la recette métier."],
-      ["Acteurs clés", "Matéo pilote la mission avec la DAF, le contrôle de gestion et le référent SI du Client Horizon."],
-      ["Sujets ouverts", "Granularité du Forecast, qualité de l’axe produit, règles d’allocation et validation du mapping analytique."],
-      ["Risque principal", "Des historiques ERP hétérogènes peuvent fragiliser les comparaisons Réel / Budget / Forecast pendant la recette."]
-    ]
-  },
-  cap: {
-    label: "Cap",
-    subtitle: "La direction choisie : ce que le projet cherche à atteindre maintenant",
-    items: [
-      ["Cap actuel", "Cadrer et sécuriser le modèle Budget / Forecast avant la recette métier."],
-      ["Critère de réussite", "Une DAF capable de piloter Réel, Budget et Forecast dans un même modèle, avec des règles comprises et validées."],
-      ["Prochain jalon", "Atelier DAF sur les règles de gestion et le workflow, puis lancement des scénarios de recette UAT."],
-      ["Direction actée", "Forecast glissant 12 mois, ERP comme source du Réel et workflow de validation à deux niveaux."]
-    ]
-  },
-  manoeuvres: {
-    label: "Manœuvres",
-    subtitle: "Les actions concrètes nécessaires pour tenir le cap",
-    items: [
-      ["Finaliser le mapping analytique", "Matéo · 12 correspondances comptes / centres de coûts restent à valider avec le contrôle de gestion."],
-      ["Arbitrer la granularité du Forecast", "Choisir entre BU × Produit et BU seule pour la première mise en production."],
-      ["Préparer la recette UAT", "Construire les scénarios import Réel, saisie Budget, reforecast, allocation, validation, restitution et export."],
-      ["Sécuriser le planning", "Vérifier que recette, corrections et formation tiennent avant l’ouverture de la campagne budgétaire."]
-    ]
-  },
-  arsenal: {
-    label: "Arsenal",
-    subtitle: "Les outils, documents, données et références embarqués pour avancer sur l’île",
-    items: [
-      ["Cadrage fonctionnel v1.4", "Périmètre Budget, Forecast, reporting P&L, utilisateurs, règles de gestion et jalons du projet."],
-      ["Mapping ERP → EPM", "Correspondance comptes, centres de coûts, BU, produits et axes analytiques."],
-      ["Dictionnaire des données", "Définition des indicateurs, sources, fréquence de mise à jour et responsable de chaque donnée."],
-      ["Plan de recette UAT", "Scénarios de test métier, jeux de données, résultats attendus, anomalies et critères de validation."]
-    ]
-  },
-  journal: {
-    label: "Journal de bord",
-    subtitle: "Les passages de Vogue Marry sur cette île, consignés dans l’ordre du voyage",
-    items: [
-      ["09 sept. — Escale · Comité projet DAF / Kiwika", "Avancement du cadrage. Décision : forecast glissant 12 mois. Risque : qualité hétérogène des axes ERP. Action : contrôler le mapping analytique."],
-      ["12 sept. — Escale · Atelier Budget & Forecast", "Arbitrage attendu sur la granularité de saisie et le circuit de validation. Document : cadrage fonctionnel v1.4. Audio et transcription rattachés à l’escale."],
-      ["16 sept. — Escale · Atelier Data / SI", "Mapping ERP → EPM, contrôles de cohérence et reprise des historiques. Point sensible : fiabilité de l’axe produit à confirmer avec le SI."],
-      ["23 sept. — Escale prévue · Comité de recette", "Préparer les scénarios UAT, les utilisateurs pilotes et les critères de validation. La sortie de cette escale mettra à jour la carte de l’île."]
-    ]
-  }
-};
-
-const VIEW_CONTENT = {
-  iles: [
-    ["Réunions & escales", "À structurer", "Les réunions, décisions et comptes rendus rassemblés au même endroit."],
-    ["Cœur du navire", "En construction", "La mémoire centrale et les liens entre les projets."],
-    ["Traces audio", "Priorité", "Les enregistrements à transcrire et rattacher aux bonnes escales."],
-    ["Coffre documentaire", "En cours", "Les documents, versions, preuves et pièces utiles."],
-    ["Longue-vue recherche", "À brancher", "La recherche globale dans la mémoire de Vogue Marry."],
-    ["Transmission Mateo", "Cap clair", "Les éléments prêts à être transmis et repris."]
-  ],
-  escales: [
-    ["Démo Mateo", "À dater", "Préparer la réunion, rattacher l’audio et consigner les décisions."],
-    ["Point associé", "À préparer", "Clarifier le périmètre autonome de Vogue Marry."],
-    ["Reprise technique", "En cours", "Stabiliser le dépôt et éviter les versions concurrentes."]
-  ],
-  journal: [
-    ["Vogue Marry est le produit officiel", "Validé", "Azoth Studio reste l’atelier qui le porte."],
-    ["Ne plus travailler dans les brouillons", "Protection", "Les anciennes copies servent uniquement d’archives."],
-    ["Créer le Log Pose de reprise", "À faire", "État, prochaine action, risques et décisions."]
-  ],
-  coffre: [
-    ["Présentation Mateo", "Support", "Conserver les supports de démonstration de référence."],
-    ["Charte Kiwika", "Document", "Rattacher la note de cadrage au bon projet."],
-    ["Trames réunion", "Méthode", "Déroulé, marqueurs audio et structure de compte rendu."]
-  ],
-  longuevue: [
-    ["Recherche globale", "À brancher", "Retrouver une décision, un document ou une trace depuis un seul champ."],
-    ["Filtres utiles", "Mémoire", "Projet, date, personne, type de trace et statut."],
-    ["Résultat attendu", "Usage", "Ne plus fouiller dans plusieurs dossiers pour retrouver une information."]
-  ],
-  manoeuvres: [
-    ["Ranger les doublons", "Priorité", "Identifier l’officiel, les archives et la documentation."],
-    ["Brancher la vraie mémoire", "V2", "Relier les escales, le coffre, le journal et les caps."],
-    ["Préparer la démo", "À suivre", "Montrer un parcours simple et compréhensible."]
-  ],
-  caps: [
-    ["Vogue Marry = produit", "Acté", "Le produit n’est pas Azoth : il est porté par Azoth."],
-    ["Un fil = un projet", "Règle", "Éviter de mélanger plusieurs chantiers dans la même zone."],
-    ["Lisibilité avant décoration", "Cap", "La structure doit rester utilisable avant toute finition esthétique."]
-  ]
-};
 
 const APP_CSS = `
 :root { font-family: Georgia, "Times New Roman", serif; color: #13202a; background: #120b07; }
@@ -321,6 +167,7 @@ button { font: inherit; }
 .island-card em.blue::before { background: #3690b5; }
 .island-card em.gold::before { background: #c39836; }
 .compass-watermark { position: absolute; right: 7%; top: 8%; z-index: 2; width: 116px; height: 116px; display: grid; place-items: center; border: 2px solid rgba(244,221,157,.35); border-radius: 50%; color: rgba(244,221,157,.45); }
+.map-empty { position: absolute; inset: 50% auto auto 50%; z-index: 5; width: min(360px,80%); transform: translate(-50%,-50%); padding: 18px; color: #f1dca6; text-align: center; border: 1px dashed rgba(241,220,166,.5); border-radius: 10px; background: rgba(4,29,40,.42); font: .9rem/1.4 Arial,sans-serif; }
 
 .generic-view { height: 100%; min-height: 470px; padding: 32px; background: linear-gradient(160deg,#0c6175,#07384e); box-shadow: inset 0 0 0 10px rgba(62,32,12,.55); overflow: auto; }
 .generic-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 20px; }
@@ -328,10 +175,141 @@ button { font: inherit; }
 .generic-card small { display: inline-block; margin-bottom: 12px; color: #795a2c; font: 700 .72rem Arial,sans-serif; letter-spacing: .1em; text-transform: uppercase; }
 .generic-card h3 { margin: 0 0 10px; font-size: 1.35rem; }
 .generic-card p { margin: 0; color: #624f35; font: .95rem/1.5 Arial,sans-serif; }
+.data-empty { padding: 28px; color: #4d3b25; text-align: center; border: 1px dashed rgba(112,75,28,.34); border-radius: 10px; background: rgba(255,255,255,.18); }
+.data-empty h3 { margin: 0 0 8px; font-size: 1.25rem; }
+.data-empty p { margin: 0; color: #675438; font: .85rem/1.45 Arial,sans-serif; }
+.data-state { margin: 14px 0; color: #dfc991; font: .82rem/1.4 Arial,sans-serif; }
+.data-state.error { padding: 10px 12px; color: #ffe2d1; border: 1px solid rgba(255,185,157,.35); border-radius: 7px; background: rgba(137,48,36,.3); }
+.data-toolbar { margin-bottom: 20px; display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; color: #f1dca6; }
+.data-toolbar h3 { margin: 3px 0 5px; font-size: 1.55rem; font-weight: 500; }
+.data-toolbar p { margin: 0; color: #d8c89d; font: .8rem/1.4 Arial,sans-serif; }
+.data-kicker { color: #efd79c !important; font-size: .68rem !important; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; }
+.data-count { min-width: 34px; height: 34px; display: grid; place-items: center; color: #26313a; border-radius: 50%; background: #efd79c; font: 700 .8rem Arial,sans-serif; }
+.meeting-list, .search-results { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.meeting-card { min-height: 0; }
+.meeting-card h3 { margin-bottom: 6px; }
+.meeting-date { color: #806334 !important; font-size: .78rem !important; }
+.meeting-flags { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 6px; }
+.meeting-flags span { padding: 4px 7px; color: #604b2e; border: 1px solid rgba(112,75,28,.22); border-radius: 999px; background: rgba(255,255,255,.26); font: .68rem Arial,sans-serif; }
+.meeting-actions { margin-top: 15px; display: flex; flex-wrap: wrap; gap: 8px; }
+.meeting-actions button { padding: 7px 10px; color: #3f301a; border: 1px solid rgba(112,75,28,.28); border-radius: 6px; background: rgba(255,255,255,.3); cursor: pointer; font: 700 .7rem Arial,sans-serif; }
+.meeting-actions button:disabled { opacity: .6; cursor: wait; }
+.meeting-report { max-height: 340px; margin-top: 15px; padding: 11px; overflow: auto; border: 1px solid rgba(112,75,28,.22); border-radius: 7px; background: rgba(255,255,255,.24); }
+.meeting-report small { margin-bottom: 8px; }
+.meeting-report pre { margin: 0; white-space: pre-wrap; color: #55442d; font: .75rem/1.45 Arial,sans-serif; }
+.meeting-report textarea { width: 100%; min-height: 260px; resize: vertical; padding: 10px; color: #55442d; border: 1px solid rgba(112,75,28,.28); border-radius: 6px; background: rgba(255,255,255,.62); font: .75rem/1.45 Arial,sans-serif; }
+.meeting-report-actions { margin-top: 9px; display: flex; flex-wrap: wrap; align-items: center; gap: 9px; }
+.meeting-report-actions button { padding: 7px 10px; color: #3f301a; border: 1px solid rgba(112,75,28,.28); border-radius: 6px; background: #efd79c; cursor: pointer; font: 700 .7rem Arial,sans-serif; }
+.meeting-report-actions button:disabled { opacity: .6; cursor: wait; }
+.meeting-report-actions span { color: #806334; font: .68rem Arial,sans-serif; }
+.documents-toolbar { margin-bottom: 18px; padding: 13px 15px; display: flex; align-items: end; justify-content: space-between; gap: 14px; color: #4d3b25; border: 1px solid #8d6431; border-radius: 9px; background: linear-gradient(180deg,#fff1ca,#e5c785); }
+.documents-toolbar label { display: grid; gap: 5px; color: #6d542f; font: 700 .67rem Arial,sans-serif; letter-spacing: .04em; text-transform: uppercase; }
+.documents-toolbar select { min-width: 190px; padding: 8px 9px; color: #332715; border: 1px solid rgba(112,75,28,.34); border-radius: 6px; background: rgba(255,255,255,.65); font: .78rem Arial,sans-serif; }
+.document-upload-button { position: relative; padding: 9px 12px; color: #26313a !important; border: 1px solid #b7873d; border-radius: 6px; background: #efd79c; cursor: pointer; }
+.document-upload-button input { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.document-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.document-card { min-height: 0; }
+.document-card-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+.document-card-heading h3 { margin-bottom: 4px; overflow-wrap: anywhere; }
+.document-status { flex: 0 0 auto; padding: 5px 7px; color: #315b43; border: 1px solid rgba(49,91,67,.24); border-radius: 999px; background: rgba(170,224,183,.35); font: 700 .64rem Arial,sans-serif; }
+.document-status.pending { color: #82501f; border-color: rgba(130,80,31,.28); background: rgba(239,215,156,.58); }
+.document-meta, .document-project, .document-path { margin-top: 8px !important; font-size: .74rem !important; }
+.document-project strong { color: #3f301a; }
+.document-path { color: #806334 !important; overflow-wrap: anywhere; font-size: .68rem !important; }
+.document-review { margin-top: 14px; padding: 11px; border: 1px solid rgba(112,75,28,.24); border-radius: 7px; background: rgba(255,255,255,.22); }
+.document-review > div:first-child strong, .document-review > div:first-child span { display: block; }
+.document-review > div:first-child span { margin-top: 3px; color: #725a38; font: .73rem/1.35 Arial,sans-serif; }
+.document-review ul { margin: 9px 0 0; padding-left: 18px; color: #82501f; font: .7rem/1.35 Arial,sans-serif; }
+.document-clear { margin-top: 9px !important; color: #315b43 !important; font-size: .72rem !important; }
+.document-review-actions { margin-top: 11px; display: flex; align-items: end; gap: 8px; }
+.document-review-actions label { flex: 1; display: grid; gap: 5px; color: #6d542f; font: 700 .65rem Arial,sans-serif; letter-spacing: .04em; text-transform: uppercase; }
+.document-review-actions select { width: 100%; padding: 8px 7px; color: #332715; border: 1px solid rgba(112,75,28,.34); border-radius: 6px; background: rgba(255,255,255,.65); font: .76rem Arial,sans-serif; }
+.document-review-actions button { padding: 8px 10px; color: #26313a; border: 1px solid #b7873d; border-radius: 6px; background: #efd79c; cursor: pointer; font: 700 .68rem Arial,sans-serif; }
+.document-review-actions button:disabled { opacity: .55; cursor: not-allowed; }
+.knowledge-toolbar { margin-bottom: 18px; padding: 13px 15px; display: flex; align-items: end; gap: 14px; color: #4d3b25; border: 1px solid #8d6431; border-radius: 9px; background: linear-gradient(180deg,#fff1ca,#e5c785); }
+.knowledge-toolbar label { display: grid; gap: 5px; color: #6d542f; font: 700 .67rem Arial,sans-serif; letter-spacing: .04em; text-transform: uppercase; }
+.knowledge-toolbar select { min-width: 190px; padding: 8px 9px; color: #332715; border: 1px solid rgba(112,75,28,.34); border-radius: 6px; background: rgba(255,255,255,.65); font: .78rem Arial,sans-serif; }
+.knowledge-list { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 14px; }
+.knowledge-card { min-height: 0; }
+.knowledge-card-heading { display: flex; align-items: start; justify-content: space-between; gap: 12px; }
+.knowledge-card-heading h3 { margin-bottom: 4px; overflow-wrap: anywhere; }
+.knowledge-status { flex: 0 0 auto; padding: 5px 7px; color: #315b43; border: 1px solid rgba(49,91,67,.24); border-radius: 999px; background: rgba(170,224,183,.35); font: 700 .64rem Arial,sans-serif; }
+.knowledge-status.pending { color: #82501f; border-color: rgba(130,80,31,.28); background: rgba(239,215,156,.58); }
+.knowledge-meta { margin-top: 8px !important; color: #806334 !important; font-size: .74rem !important; }
+.knowledge-warning { margin-top: 9px !important; padding: 7px 9px; color: #82501f !important; border: 1px solid rgba(130,80,31,.24); border-radius: 6px; background: rgba(239,215,156,.4); font-size: .72rem !important; }
+.knowledge-edit-form { margin-top: 14px; padding: 11px; border: 1px solid rgba(112,75,28,.24); border-radius: 7px; background: rgba(255,255,255,.22); }
+.knowledge-edit-form label { display: grid; gap: 5px; margin-bottom: 9px; color: #6d542f; font: 700 .65rem Arial,sans-serif; letter-spacing: .04em; text-transform: uppercase; }
+.knowledge-edit-form input, .knowledge-edit-form textarea { width: 100%; min-width: 0; padding: 8px 9px; color: #332715; border: 1px solid rgba(112,75,28,.34); border-radius: 6px; background: rgba(255,255,255,.65); font: .78rem/1.35 Arial,sans-serif; resize: vertical; }
+.knowledge-edit-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.knowledge-edit-grid label { margin-bottom: 0; }
+.knowledge-wide-field { grid-column: 1/-1; }
+.knowledge-validate-button { margin-top: 11px; padding: 8px 10px; color: #26313a; border: 1px solid #b7873d; border-radius: 6px; background: #efd79c; cursor: pointer; font: 700 .68rem Arial,sans-serif; }
+.knowledge-validate-button:disabled { opacity: .55; cursor: not-allowed; }
+.knowledge-details { margin-top: 14px; display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 8px; }
+.knowledge-details > div { padding: 8px 9px; border: 1px solid rgba(112,75,28,.2); border-radius: 6px; background: rgba(255,255,255,.2); }
+.knowledge-details strong, .knowledge-details span { display: block; }
+.knowledge-details strong { color: #806334; font: 700 .62rem Arial,sans-serif; letter-spacing: .05em; text-transform: uppercase; }
+.knowledge-details span { margin-top: 3px; color: #5f4c31; font: .72rem/1.35 Arial,sans-serif; overflow-wrap: anywhere; }
+.search-form { margin-bottom: 20px; padding: 16px; color: #4d3b25; border: 1px solid #8d6431; border-radius: 9px; background: linear-gradient(180deg,#fff1ca,#e5c785); }
+.search-form label { display: block; margin-bottom: 7px; font: 700 .7rem Arial,sans-serif; letter-spacing: .06em; text-transform: uppercase; }
+.search-form > div { display: flex; gap: 8px; }
+.search-form input { min-width: 0; flex: 1; padding: 10px 11px; color: #332715; border: 1px solid rgba(112,75,28,.34); border-radius: 6px; background: rgba(255,255,255,.65); font: .85rem Arial,sans-serif; }
+.search-form select { max-width: 220px; padding: 9px 10px; color: #332715; border: 1px solid rgba(112,75,28,.34); border-radius: 6px; background: rgba(255,255,255,.65); font: .78rem Arial,sans-serif; }
+.search-form button { padding: 9px 13px; color: #26313a; border: 1px solid #b7873d; border-radius: 6px; background: #efd79c; cursor: pointer; font: 700 .78rem Arial,sans-serif; }
+.search-form button:disabled { opacity: .6; cursor: wait; }
+.search-result { min-height: 0; }
+.search-result span { display: block; margin-top: 12px; color: #806334; overflow-wrap: anywhere; font: .7rem Arial,sans-serif; }
+.search-read-button { margin-top: 12px; padding: 7px 9px; color: #3f301a; border: 1px solid rgba(112,75,28,.28); border-radius: 6px; background: rgba(255,255,255,.3); cursor: pointer; font: 700 .7rem Arial,sans-serif; }
+.search-read-button:disabled { opacity: .6; cursor: wait; }
+.search-source { max-height: 260px; margin-top: 10px; padding: 9px; overflow: auto; border: 1px solid rgba(112,75,28,.22); border-radius: 6px; background: rgba(255,255,255,.28); }
+.search-source small { display: block; margin-bottom: 7px; color: #806334; font: 700 .65rem Arial,sans-serif; }
+.search-source pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: #55442d; font: .7rem/1.4 Arial,sans-serif; }
+.meeting-mode-shell { margin-bottom: 20px; padding: 16px; color: #332715; border: 1px solid #8d6431; border-radius: 10px; background: linear-gradient(180deg,#fff1ca,#e5c785); box-shadow: 0 10px 20px rgba(0,0,0,.18),inset 0 0 0 2px rgba(255,255,255,.36); }
+.meeting-setup { display: grid; grid-template-columns: minmax(180px,.8fr) minmax(0,1.2fr); gap: 20px; align-items: start; }
+.meeting-setup h3 { margin: 3px 0 6px; font-size: 1.3rem; }
+.meeting-setup p { margin: 0; color: #675438; font: .8rem/1.4 Arial,sans-serif; }
+.meeting-setup-fields { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; }
+.meeting-setup-fields label { display: grid; gap: 5px; color: #6d542f; font: 700 .67rem Arial,sans-serif; letter-spacing: .04em; text-transform: uppercase; }
+.meeting-setup-fields input, .meeting-setup-fields select, .meeting-setup-fields textarea { width: 100%; min-width: 0; padding: 9px 8px; color: #332715; border: 1px solid rgba(112,75,28,.34); border-radius: 6px; background: rgba(255,255,255,.65); font: .78rem Arial,sans-serif; }
+.meeting-setup-fields textarea { resize: vertical; }
+.meeting-context-field { grid-column: 1/-1; }
+.meeting-notice { margin: 12px 0 0 !important; padding: 9px 11px; color: #315b43 !important; border: 1px solid rgba(49,91,67,.25); border-radius: 6px; background: rgba(170,224,183,.35); font: .78rem Arial,sans-serif !important; }
+.meetingMode { margin-top: 16px; padding-top: 15px; border-top: 1px solid rgba(112,75,28,.22); }
+.meetingMode .meetingTop { display: flex; align-items: flex-start; justify-content: space-between; gap: 15px; }
+.meetingMode .eyebrow { margin: 0 0 4px; color: #806334; font: 700 .65rem Arial,sans-serif; letter-spacing: .08em; text-transform: uppercase; }
+.meetingMode h2 { margin: 0; font-size: 1.15rem; }
+.meetingMode .meetingTop p:not(.eyebrow) { margin-top: 4px; }
+.bigTimer { min-width: 92px; padding: 8px 10px; text-align: center; border: 1px solid rgba(112,75,28,.28); border-radius: 7px; background: rgba(255,255,255,.24); }
+.bigTimer span { display: block; color: #806334; font: 700 .62rem Arial,sans-serif; }
+.bigTimer strong { display: block; margin-top: 2px; font: 700 1.25rem/1 Arial,sans-serif; }
+.bigTimer.recording { color: #8f3933; border-color: rgba(143,57,51,.45); }
+.meetingControls { margin: 13px 0; }
+.startMeetingButton, .stopMeetingButton { padding: 10px 13px; display: inline-flex; align-items: center; gap: 8px; color: #26313a; border: 1px solid #b7873d; border-radius: 7px; background: #efd79c; cursor: pointer; font: 700 .78rem Arial,sans-serif; }
+.stopMeetingButton { color: #fff0e7; border-color: #8f3933; background: #8f3933; }
+.markerZone h3, .markerHistory h3 { margin: 15px 0 5px; font-size: .95rem; }
+.markerZone p, .markerHistory .empty { margin: 0; color: #675438; font: .75rem/1.35 Arial,sans-serif; }
+.markerGrid { margin-top: 9px; display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 6px; }
+.markerButton { min-height: 34px; padding: 6px 7px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; color: #604b2e; border: 1px solid rgba(112,75,28,.24); border-radius: 6px; background: rgba(255,255,255,.25); cursor: pointer; font: 700 .66rem Arial,sans-serif; }
+.markerButton:disabled { opacity: .45; cursor: not-allowed; }
+.markerList { display: flex; flex-wrap: wrap; gap: 6px; }
+.markerItem { padding: 5px 7px; color: #604b2e; border: 1px solid rgba(112,75,28,.2); border-radius: 6px; background: rgba(255,255,255,.24); font: .68rem Arial,sans-serif; }
+.markerItem strong { margin-right: 5px; }
 
 .islands-view { height: 100%; min-height: 470px; padding: 22px 24px 24px; background: linear-gradient(160deg,#0c6175,#07384e); box-shadow: inset 0 0 0 10px rgba(62,32,12,.55); overflow: auto; }
 .islands-toolbar { min-height: 42px; margin-bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 16px; color: #f1dca6; }
 .islands-toolbar p { margin: 0; font: .82rem/1.35 Arial,sans-serif; color: #d8c89d; }
+.project-create-form { margin-bottom: 18px; padding: 16px; display: grid; grid-template-columns: minmax(180px,1fr) minmax(180px,1fr) auto; gap: 12px 16px; align-items: end; color: #332715; border: 1px solid #8d6431; border-radius: 9px; background: linear-gradient(180deg,#fff1ca,#e5c785); box-shadow: 0 8px 16px rgba(0,0,0,.16),inset 0 0 0 2px rgba(255,255,255,.28); }
+.project-create-form > div { grid-row: span 2; align-self: center; }
+.project-create-form h3 { margin: 3px 0 5px; font-size: 1.16rem; }
+.project-create-form p { margin: 0; color: #675438; font: .76rem/1.35 Arial,sans-serif; }
+.project-create-form label { display: grid; gap: 5px; color: #6d542f; font: 700 .67rem Arial,sans-serif; letter-spacing: .04em; text-transform: uppercase; }
+.project-create-form label span { font-weight: 400; text-transform: none; }
+.project-create-form input, .project-create-form textarea { width: 100%; padding: 9px 10px; color: #332715; border: 1px solid rgba(112,75,28,.34); border-radius: 6px; background: rgba(255,255,255,.65); font: .82rem Arial,sans-serif; }
+.project-create-form textarea { resize: vertical; }
+.project-create-form > button { padding: 9px 12px; color: #26313a; border: 1px solid #b7873d; border-radius: 6px; background: #efd79c; cursor: pointer; font: 700 .75rem Arial,sans-serif; }
+.project-create-form > button:disabled { opacity: .6; cursor: wait; }
+.form-message { grid-column: 2/-1; margin: -4px 0 0 !important; color: #315b43 !important; }
+.form-message.error { color: #8b3f2d !important; }
 .view-switch { display: inline-flex; flex: 0 0 auto; padding: 3px; border: 1px solid rgba(238,213,154,.42); border-radius: 8px; background: rgba(4,29,40,.34); }
 .view-switch button { padding: 7px 13px; border: 0; border-radius: 5px; color: #ead5a4; background: transparent; cursor: pointer; font: 700 .76rem Arial,sans-serif; }
 .view-switch button.active { color: #26313a; background: #efd79c; }
@@ -422,7 +400,7 @@ button { font: inherit; }
 .mind-detail-item strong { display: block; font-size: .79rem; }
 .mind-detail-item span { display: block; margin-top: 3px; color: #6c593c; font: .67rem/1.3 Arial,sans-serif; }
 
-.log-pose { min-height: 0; padding: 22px 25px 16px; display: flex; flex-direction: column; overflow: hidden; color: #372916; background: linear-gradient(rgba(255,255,255,.24),rgba(255,255,255,.04)),repeating-linear-gradient(0deg,rgba(112,75,28,.035) 0 1px,transparent 2px 6px),#ead7aa; box-shadow: inset 18px 0 34px rgba(80,48,14,.13); }
+.log-pose { min-height: 0; padding: 22px 25px 16px; display: flex; flex-direction: column; overflow: auto; color: #372916; background: linear-gradient(rgba(255,255,255,.24),rgba(255,255,255,.04)),repeating-linear-gradient(0deg,rgba(112,75,28,.035) 0 1px,transparent 2px 6px),#ead7aa; box-shadow: inset 18px 0 34px rgba(80,48,14,.13); }
 .log-pose h2 { margin: 0; text-align: center; font-size: 2rem; font-weight: 500; }
 .log-ornament { width: 90px; height: 1px; margin: 10px auto 16px; background: #9d7845; }
 .log-compass { width: 132px; height: 132px; min-width: 132px; min-height: 132px; flex: 0 0 132px; aspect-ratio: 1 / 1; margin: 0 auto 16px; display: grid; place-items: center; color: #77501f; border: 9px double #7d5224; border-radius: 50%; background: radial-gradient(circle,#4cb1ca 0 20%,#0f6b85 21% 49%,#d5aa52 50% 53%,#6f461e 54%); box-shadow: 0 12px 24px rgba(70,42,12,.25),inset 0 0 20px rgba(255,255,255,.34); }
@@ -430,7 +408,13 @@ button { font: inherit; }
 .log-section label { display: block; margin-bottom: 6px; color: #735a34; font: .78rem Arial,sans-serif; }
 .log-section strong { display: block; font-size: 1.3rem; font-weight: 500; line-height: 1.25; }
 .log-section p { margin: 5px 0 0; color: #6b5637; font: .82rem/1.4 Arial,sans-serif; }
+.log-list { margin: 7px 0 0; padding-left: 18px; color: #6b5637; font: .82rem/1.4 Arial,sans-serif; }
+.log-list li + li { margin-top: 5px; }
+.log-pending { color: #8b4f29 !important; font-weight: 700; }
+.log-state { margin: 8px 0 14px; color: #6b5637; text-align: center; font: .8rem/1.4 Arial,sans-serif; }
+.log-state.error { padding: 9px 10px; color: #7d3024; border: 1px solid rgba(125,48,36,.3); border-radius: 7px; background: rgba(255,221,204,.55); }
 .log-button { margin-top: auto; padding: 11px 16px; display: flex; align-items: center; justify-content: center; gap: 10px; color: #3f301a; border: 1px solid rgba(111,76,31,.28); background: rgba(255,255,255,.16); cursor: pointer; }
+.log-button:disabled { cursor: default; opacity: .62; }
 
 @media (max-width: 1180px) {
   .vogue-shell { height: auto; min-height: 100vh; grid-template-columns: 245px minmax(0,1fr); overflow: visible; }
@@ -459,7 +443,21 @@ button { font: inherit; }
   .pont-view { height: auto; min-height: 680px; overflow: visible; }
   .priorities-grid { grid-template-columns: 1fr; }
   .sea-map, .generic-view, .islands-view, .project-world-view { min-height: 680px; }
-  .generic-grid, .island-project-grid, .world-overview, .world-items { grid-template-columns: 1fr; }
+  .generic-grid, .island-project-grid, .world-overview, .world-items, .document-list, .knowledge-list { grid-template-columns: 1fr; }
+  .meeting-list, .search-results { grid-template-columns: 1fr; }
+  .documents-toolbar { align-items: stretch; flex-direction: column; }
+  .documents-toolbar select { width: 100%; }
+  .knowledge-toolbar { align-items: stretch; flex-direction: column; }
+  .knowledge-toolbar select { width: 100%; }
+  .knowledge-edit-grid, .knowledge-details { grid-template-columns: 1fr; }
+  .knowledge-wide-field { grid-column: auto; }
+  .meeting-setup, .meeting-setup-fields { grid-template-columns: 1fr; }
+  .search-form > div { flex-direction: column; }
+  .search-form select { max-width: none; }
+  .project-create-form { grid-template-columns: 1fr; }
+  .project-create-form > div { grid-row: auto; }
+  .form-message { grid-column: auto; }
+  .markerGrid { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .world-summary-card.wide { grid-column: auto; }
   .world-map { grid-template-columns: repeat(2,minmax(0,1fr)); }
   .islands-toolbar { align-items: flex-start; flex-direction: column; }
@@ -480,7 +478,8 @@ button { font: inherit; }
 }
 `;
 
-function Sidebar({ active, onChange }) {
+function Sidebar({ active, onChange, projectCount, meetingCount, journalCount }) {
+  const counts = { iles: projectCount, escales: meetingCount, journal: journalCount };
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -489,17 +488,17 @@ function Sidebar({ active, onChange }) {
         <p>Le journal de bord<br />qui vous aide à garder<br />le cap sur vos projets.</p>
       </div>
       <nav className="side-nav">
-        {MENU.filter(({ id }) => id !== "manoeuvres" && id !== "caps").map(({ id, label, sublabel, icon: Icon, count }) => (
+        {MENU.map(({ id, label, sublabel, icon: Icon }) => (
           <button key={id} className={active === id ? "active" : ""} onClick={() => onChange(id)}>
             <span className="nav-icon"><Icon size={25} /></span>
             <span className="nav-label"><strong>{label}</strong><span>{sublabel}</span></span>
-            {count ? <span className="nav-count">{count}</span> : null}
+            {counts[id] ? <span className="nav-count">{counts[id]}</span> : null}
           </button>
         ))}
       </nav>
       <div className="captain-card">
         <div className="captain-avatar">M</div>
-        <div><strong>Capitaine Mateo</strong><span>Gardien du cap</span></div>
+        <div><strong>Mémoire locale</strong><span>Données privées sur cet ordinateur</span></div>
         <ChevronRight size={18} />
       </div>
       <div className="sidebar-tools">
@@ -523,11 +522,8 @@ function StageHeader({ active, project }) {
     manoeuvres: ["Manœuvres", "Voir les actions à mener et les prochaines relances"],
     caps: ["Caps validés", "Retrouver les décisions déjà actées"]
   };
-  const projectParts = project ? project.name.split("—").map((part) => part.trim()) : [];
-  const projectMission = projectParts[0] || "Projet";
-  const projectClient = projectParts[1] || project?.name || "";
   const [title, subtitle] = project
-    ? [projectClient.toUpperCase(), `${projectMission} · Budget / Forecast · ${project.status}`]
+    ? [project.name.toUpperCase(), `${project.detail} · ${project.status}`]
     : titles[current.id];
   return (
     <header className={`stage-header${project ? " project-mode" : ""}`}>
@@ -557,7 +553,7 @@ function IslandVisual({ kind }) {
   );
 }
 
-function SeaMap() {
+function SeaMap({ projects, onOpenProject }) {
   return (
     <section className="sea-map">
       <svg className="route-layer" viewBox="0 0 1000 620" preserveAspectRatio="none" aria-hidden="true">
@@ -570,8 +566,9 @@ function SeaMap() {
         <circle cx="525" cy="445" r="6" />
       </svg>
       <div className="compass-watermark"><Compass size={74} /></div>
-      {PROJECTS.map((project) => (
-        <button className="island-node" key={project.name} style={{ left: `${project.x}%`, top: `${project.y}%` }}>
+      {!projects.length ? <div className="map-empty">Aucune île enregistrée dans la mémoire locale.</div> : null}
+      {projects.map((project) => (
+        <button className="island-node" key={project.slug} style={{ left: `${project.x}%`, top: `${project.y}%` }} onClick={() => onOpenProject(project)}>
           <IslandVisual kind={project.kind} />
           <span className="island-card">
             <strong>{project.name}</strong>
@@ -584,15 +581,26 @@ function SeaMap() {
   );
 }
 
-function PriorityBoard() {
+function PriorityBoard({ meetings }) {
+  const priorities = meetings
+    .filter((meeting) => meeting.status !== "Validé")
+    .slice(0, 3)
+    .map((meeting, index) => ({
+      rank: index + 1,
+      project: meeting.title,
+      island: meeting.projectName,
+      reason: meeting.status,
+      action: meeting.hasAudio && !meeting.hasRawNotes ? "Transcrire et rattacher l’audio." : "Relire et compléter le journal.",
+      tone: meeting.status === "Audio à transcrire" ? "red" : "blue"
+    }));
   return (
     <section className="priorities-board" aria-label="Priorités maintenant">
       <div className="priorities-heading">
         <strong>Priorités maintenant</strong>
-        <span>3 caps à regarder avant le reste</span>
+        <span>{priorities.length ? `${priorities.length} escale${priorities.length > 1 ? "s" : ""} à regarder avant le reste` : "Aucune priorité ouverte"}</span>
       </div>
       <div className="priorities-grid">
-        {GLOBAL_PRIORITIES.map((priority) => (
+        {priorities.map((priority) => (
           <article className={`priority-card ${priority.tone}`} key={priority.project}>
             <span className="priority-rank">{priority.rank}</span>
             <div>
@@ -602,81 +610,66 @@ function PriorityBoard() {
             </div>
           </article>
         ))}
+        {!priorities.length ? <p className="data-state">Toutes les escales connues sont validées, ou aucune escale n’est encore enregistrée.</p> : null}
       </div>
     </section>
   );
 }
 
-function PontView() {
+function PontView({ projects, meetings, onOpenProject }) {
   return (
     <section className="pont-view">
-      <PriorityBoard />
-      <SeaMap />
+      <PriorityBoard meetings={meetings} />
+      <SeaMap projects={projects} onOpenProject={onOpenProject} />
     </section>
   );
 }
 
-function IslandsView({ onOpenProject }) {
-  const [mode, setMode] = useState("cards");
-
-  const projectAction = (project) => project.name === "Déploiement EPM — Client Horizon" ? (
-    <button type="button" className="project-open-button" onClick={() => onOpenProject(project)}>Ouvrir →</button>
-  ) : (
-    <span className="project-pilot-note">Après validation du pilote</span>
-  );
-
-  return (
-    <section className="islands-view">
-      <div className="islands-toolbar">
-        <p>Une île = un projet. Sa carte montre son état actuel ; son journal conserve les escales et ce qu’elles ont produit.</p>
-        <div className="view-switch" aria-label="Mode d’affichage des îles">
-          <button type="button" className={mode === "cards" ? "active" : ""} onClick={() => setMode("cards")}>Cartes</button>
-          <button type="button" className={mode === "list" ? "active" : ""} onClick={() => setMode("list")}>Liste</button>
-        </div>
-      </div>
-
-      {mode === "cards" ? (
-        <div className="island-project-grid">
-          {ISLAND_PROJECTS.map((project) => (
-            <article className="project-card" key={project.name}>
-              <div className="project-card-top">
-                <div>
-                  <small>{project.island}</small>
-                  <h3>{project.name}</h3>
-                </div>
-                <span className={`project-status ${project.tone}`}>{project.status}</span>
-              </div>
-              <div className="project-meta">
-                <div><label>Cap actuel</label><p>{project.cap}</p></div>
-                <div><label>Prochaine reprise</label><p>{project.next}</p></div>
-              </div>
-              {projectAction(project)}
-            </article>
-          ))}
-        </div>
-      ) : (
-        <div className="island-project-list">
-          <div className="project-row header" aria-hidden="true">
-            <span>Projet</span><span>État</span><span>Cap actuel</span><span>Prochaine reprise</span><span />
-          </div>
-          {ISLAND_PROJECTS.map((project) => (
-            <article className="project-row" key={project.name}>
-              <div><strong>{project.name}</strong><span className="project-island">{project.island}</span></div>
-              <span className={`project-status ${project.tone}`}>{project.status}</span>
-              <p>{project.cap}</p>
-              <p>{project.next}</p>
-              {projectAction(project)}
-            </article>
-          ))}
-        </div>
-      )}
-    </section>
-  );
+function IslandsView(props) {
+  return <ProjectsView {...props} />;
 }
 
 function IslandProjectView({ project, onBack }) {
   const [section, setSection] = useState("carte");
-  const currentSection = PILOT_WORLD[section];
+  const latestMeeting = project.meetings?.[0] || null;
+  const openMeetings = (project.meetings || []).filter((meeting) => meeting.status !== "Validé");
+  const sections = {
+    cap: {
+      label: "Cap",
+      subtitle: "Ce que les données connues permettent de reprendre maintenant",
+      items: [
+        ["État actuel", project.status],
+        ["Dernière escale", latestMeeting?.title || "Aucune escale enregistrée"],
+        ["Date", latestMeeting?.date || "À confirmer"],
+        ["Prochaine reprise", project.next]
+      ]
+    },
+    journal: {
+      label: "Journal de bord",
+      subtitle: "Les escales déjà enregistrées sur cette île",
+      items: project.meetings?.length
+        ? project.meetings.map((meeting) => [meeting.title, `${meeting.date || "Date à confirmer"} · ${meeting.status}`])
+        : [["Aucune escale", "Le journal sera alimenté dès qu’une réunion sera exportée."]]
+    },
+    manoeuvres: {
+      label: "Manœuvres",
+      subtitle: "Les éléments encore ouverts dans les escales du projet",
+      items: openMeetings.length
+        ? openMeetings.map((meeting) => [meeting.title, meeting.status])
+        : [["Aucune manœuvre ouverte", "Les escales connues sont validées ou le projet n’a pas encore d’escale."]]
+    },
+    arsenal: {
+      label: "Arsenal",
+      subtitle: "Les traces actuellement rattachées au projet",
+      items: [
+        ["Escales", `${project.meetings?.length || 0} escale${project.meetings?.length > 1 ? "s" : ""}`],
+        ["Audios", `${project.meetings?.filter((meeting) => meeting.hasAudio).length || 0} fichier${project.meetings?.filter((meeting) => meeting.hasAudio).length > 1 ? "s" : ""}`],
+        ["Journaux", `${project.meetings?.filter((meeting) => meeting.hasReport).length || 0} journal${project.meetings?.filter((meeting) => meeting.hasReport).length > 1 ? "x" : ""}`],
+        ["Source", "Mémoire locale Vogue Marry"]
+      ]
+    }
+  };
+  const currentSection = sections[section];
   const returnToMap = () => setSection("carte");
 
   return (
@@ -710,12 +703,12 @@ function IslandProjectView({ project, onBack }) {
 
             <article className="mind-center">
               <small>Projet · {project.status}</small>
-              <strong>{project.name.split("—")[0].trim()}</strong>
-              <p>Budget / Forecast</p>
+              <strong>{project.name}</strong>
+              <p>{project.detail}</p>
               <div className="mind-center-meta">
-                <span>4 acteurs clés</span>
-                <span>2 risques ouverts</span>
-                <span>Prochaine escale · 12 sept.</span>
+                <span>{project.meetings?.length || 0} escale{project.meetings?.length > 1 ? "s" : ""}</span>
+                <span>{openMeetings.length} ouverte{openMeetings.length > 1 ? "s" : ""}</span>
+                <span>{latestMeeting?.date || "Aucune date"}</span>
               </div>
             </article>
 
@@ -732,12 +725,12 @@ function IslandProjectView({ project, onBack }) {
             <div className="mind-resume" aria-label="Point de reprise du projet">
               <div>
                 <small>Position actuelle</small>
-                <strong>Mapping analytique à finaliser</strong>
+                <strong>{project.status}</strong>
               </div>
               <div>
                 <small>Reprendre ici</small>
-                <strong>Ouvrir le mapping ERP → EPM</strong>
-                <span>12 correspondances comptes / centres de coûts restent à valider.</span>
+                <strong>{project.next}</strong>
+                <span>{project.detail}</span>
               </div>
             </div>
           </div>
@@ -763,63 +756,65 @@ function IslandProjectView({ project, onBack }) {
   );
 }
 
-function GenericView({ active }) {
-  const cards = VIEW_CONTENT[active] || VIEW_CONTENT.iles;
+function GenericView({ active, meetings, projects, loading, error, onSaved }) {
+  if (active === "escales") return <MeetingsView meetings={meetings} projects={projects} loading={loading} error={error} onSaved={onSaved} />;
+  if (active === "journal") return <MeetingsView meetings={meetings} loading={loading} error={error} journalOnly onSaved={onSaved} />;
+  if (active === "coffre") return <DocumentsView projects={projects} />;
+  if (active === "longuevue") return <SearchView projects={projects} />;
+  if (active === "besoins") return <KnowledgeView kind="need" projects={projects} />;
+  if (active === "manoeuvres") return <KnowledgeView kind="action" projects={projects} />;
+  if (active === "caps") return <KnowledgeView kind="decision" projects={projects} />;
+
+  const [title, text] = ["Espace Vogue Marry", "Sélectionnez une fonction dans le menu."];
   return (
     <section className="generic-view">
-      <div className="generic-grid">
-        {cards.map(([title, badge, text]) => (
-          <article className="generic-card" key={title}>
-            <small>{badge}</small>
-            <h3>{title}</h3>
-            <p>{text}</p>
-          </article>
-        ))}
+      <div className="data-empty">
+        <h3>{title}</h3>
+        <p>{text}</p>
       </div>
     </section>
-  );
-}
-
-function LogPose({ active, project }) {
-  const current = MENU.find((item) => item.id === active) || MENU[0];
-  const resumeDirections = {
-    pont: "Regarder les trois priorités du Pont",
-    iles: "Choisir l’île à reprendre",
-    escales: "Consigner la prochaine escale dans le Journal",
-    journal: "Relire la dernière escale utile",
-    coffre: "Retrouver le document de référence",
-    longuevue: "Lancer la recherche utile au contexte",
-    manoeuvres: "Reprendre la prochaine manœuvre ouverte",
-    caps: "Relire la dernière décision actée"
-  };
-  return (
-    <aside className="log-pose">
-      <h2>Log Pose</h2>
-      <div className="log-ornament" />
-      <div className="log-compass"><Compass size={82} /></div>
-      <section className="log-section">
-        <label>Dernière position</label>
-        <strong>{project ? "Cadrage fonctionnel avancé" : current.label}</strong>
-        <p>{project ? "Le modèle Budget / Forecast est cadré. La recette métier se prépare." : current.sublabel}</p>
-      </section>
-      <section className="log-section">
-        <label>Point d’arrêt</label>
-        <strong>{project ? "Mapping analytique à finaliser" : "Navigation en cours"}</strong>
-        <p>{project ? "12 correspondances comptes / centres de coûts restent à valider avec le contrôle de gestion." : "Aucun point d’arrêt précis n’est encore enregistré dans cette zone."}</p>
-      </section>
-      <section className="log-section">
-        <label>Reprendre ici</label>
-        <strong>{project ? "Ouvrir le mapping ERP → EPM" : resumeDirections[active]}</strong>
-        <p>{project ? "Valider les correspondances restantes, puis préparer l’atelier DAF." : "Repartir de ce point sans devoir reconstruire tout le contexte."}</p>
-      </section>
-      <button className="log-button">Voir le point de reprise <ChevronRight size={18} /></button>
-    </aside>
   );
 }
 
 export default function App() {
   const [active, setActive] = useState("pont");
   const [selectedProject, setSelectedProject] = useState(null);
+  const [projects, setProjects] = useState([]);
+  const [meetings, setMeetings] = useState([]);
+  const [loadingData, setLoadingData] = useState(true);
+  const [dataError, setDataError] = useState("");
+
+  const refreshData = useCallback(async () => {
+    setLoadingData(true);
+    try {
+      const [loadedProjects, loadedMeetings] = await Promise.all([loadProjects(), loadInbox()]);
+      setProjects(loadedProjects);
+      setMeetings(loadedMeetings);
+      setDataError("");
+    } catch (error) {
+      setDataError(error.message || "La mémoire locale est indisponible.");
+    } finally {
+      setLoadingData(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    refreshData().catch(() => {
+      if (!cancelled) setLoadingData(false);
+    });
+    return () => { cancelled = true; };
+  }, [refreshData]);
+
+  const projectViewModels = useMemo(
+    () => projects.map((project, index) => makeProjectViewModel(project, meetings, index)),
+    [projects, meetings]
+  );
+
+  const openProject = useCallback((project) => {
+    const index = projects.findIndex((item) => item.slug === project.slug);
+    setSelectedProject(makeProjectViewModel(project, meetings, Math.max(0, index)));
+  }, [meetings, projects]);
 
   const handleSectionChange = (id) => {
     setSelectedProject(null);
@@ -828,10 +823,10 @@ export default function App() {
 
   const centralView = useMemo(() => {
     if (selectedProject) return <IslandProjectView project={selectedProject} onBack={() => setSelectedProject(null)} />;
-    if (active === "pont") return <PontView />;
-    if (active === "iles") return <IslandsView onOpenProject={setSelectedProject} />;
-    return <GenericView active={active} />;
-  }, [active, selectedProject]);
+    if (active === "pont") return <PontView projects={projectViewModels} meetings={meetings} onOpenProject={openProject} />;
+    if (active === "iles") return <IslandsView projects={projects} meetings={meetings} loading={loadingData} error={dataError} onOpenProject={openProject} onSaved={refreshData} />;
+    return <GenericView active={active} meetings={meetings} projects={projects} loading={loadingData} error={dataError} onSaved={refreshData} />;
+  }, [active, dataError, loadingData, meetings, openProject, projectViewModels, projects, refreshData, selectedProject]);
 
   const showShipLog = active === "pont" && !selectedProject;
 
@@ -839,12 +834,18 @@ export default function App() {
     <>
       <style>{APP_CSS}</style>
       <main className={`vogue-shell${showShipLog ? "" : " no-log"}`}>
-        <Sidebar active={active} onChange={handleSectionChange} />
+        <Sidebar
+          active={active}
+          onChange={handleSectionChange}
+          projectCount={projects.length}
+          meetingCount={meetings.length}
+          journalCount={meetings.filter((meeting) => meeting.hasReport).length}
+        />
         <section className="main-stage">
           <StageHeader active={active} project={selectedProject} />
           <div className="stage-content">{centralView}</div>
         </section>
-        {showShipLog ? <LogPose active={active} project={null} /> : null}
+        {showShipLog ? <LogPoseView onOpen={() => setActive("manoeuvres")} /> : null}
       </main>
     </>
   );

@@ -293,31 +293,12 @@
 }
 
 .mind-branch span {
-  display: none !important;
+  display: block !important;
 }
 
 .mind-branch::after {
-  display: block;
-  margin-top: 4px;
-  color: #765d3c;
-  font: 600 .67rem/1.2 Arial, sans-serif;
-  white-space: normal;
-}
-
-.mind-branch-cap::after {
-  content: "Sécuriser le modèle Budget / Forecast avant la recette métier";
-}
-
-.mind-branch-journal::after {
-  content: "3 escales · 09/09 · 12/09";
-}
-
-.mind-branch-manoeuvres::after {
-  content: "Mapping · UAT · Atelier DAF";
-}
-
-.mind-branch-arsenal::after {
-  content: "Mapping ERP→EPM · Plan UAT";
+  display: none;
+  content: none;
 }
 
 .mind-link {

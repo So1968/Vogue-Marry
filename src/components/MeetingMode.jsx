@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Mic,
   Square,
@@ -9,7 +9,8 @@ import {
   Monitor,
   Calculator,
   ListTodo,
-  ShieldAlert
+  ShieldAlert,
+  ClipboardList
 } from "lucide-react";
 
 const markerTypes = [
@@ -19,6 +20,7 @@ const markerTypes = [
   { key: "a_verifier", label: "À vérifier", icon: Flag },
   { key: "regle_calcul", label: "Règle de calcul", icon: Calculator },
   { key: "ecran", label: "Écran / fonctionnalité", icon: Monitor },
+  { key: "need", label: "Besoin utilisateur", icon: ClipboardList },
   { key: "blocage", label: "Blocage", icon: AlertTriangle },
   { key: "point_sensible", label: "Point sensible", icon: ShieldAlert }
 ];
@@ -45,7 +47,10 @@ export default function MeetingMode({
     let interval = null;
 
     if (isRecording) {
-      if (!startedAtRef.current) startedAtRef.current = Date.now();
+      if (!startedAtRef.current) {
+        startedAtRef.current = Date.now();
+        setSeconds(0);
+      }
 
       interval = setInterval(() => {
         const elapsed = Math.floor((Date.now() - startedAtRef.current) / 1000);

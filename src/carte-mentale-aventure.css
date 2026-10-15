@@ -131,9 +131,9 @@
     box-shadow: none !important;
   }
 
-  .mind-branch-cap::after {
-    content: "Sécuriser le modèle Budget / Forecast avant la recette métier" !important;
-    max-width: 280px;
+  .mind-branch::after {
+    display: none !important;
+    content: none !important;
   }
 
   .mind-branch:hover,

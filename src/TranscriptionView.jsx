@@ -1,7 +1,7 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import "./transcription-view.css";
 
-const API = "http://localhost:8011";
+const API = (import.meta.env.VITE_VOGUE_MARRY_API || "http://127.0.0.1:8010").replace(/\/+$/u, "");
 const LAST_JOB_KEY = "vogue-marry:last-transcription-job";
 const DEFAULT_CONTEXT = "Réunion professionnelle en français. Respecter les noms propres, sigles, termes métier et décisions entendues. Ne rien inventer si un passage est incertain.";
 const GPT_COST_PER_MINUTE_USD = 0.0045;

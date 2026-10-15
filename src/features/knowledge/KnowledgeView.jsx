@@ -65,6 +65,7 @@ function KnowledgeCard({ item, kind, onValidate, onUpdateStatus, busy }) {
   const [draft, setDraft] = useState(() => draftFromItem(item, kind));
   const pending = item.reviewStatus === "à valider";
   const [nextStatus, setNextStatus] = useState(item.statut || "À préciser");
+  useEffect(() => { setNextStatus(item.statut || "À préciser"); }, [item.statut]);
   const textField = kind === "action" ? "action" : kind === "decision" ? "decision" : "need";
 
   function updateField(field, value) {

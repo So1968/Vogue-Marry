@@ -13,7 +13,7 @@ import {
   ShipWheel,
   Telescope
 } from "lucide-react";
-import { loadInbox, loadProjects } from "./lib/local-api.js";
+import { loadInbox, loadKnowledge, loadProjects } from "./lib/local-api.js";
 import MeetingsView from "./features/meetings/MeetingsView.jsx";
 import DocumentsView from "./features/documents/DocumentsView.jsx";
 import KnowledgeView from "./features/knowledge/KnowledgeView.jsx";
@@ -629,6 +629,24 @@ function IslandsView(props) {
 
 function IslandProjectView({ project, onBack }) {
   const [section, setSection] = useState("carte");
+  const [projectActions, setProjectActions] = useState([]);
+  const [actionsLoading, setActionsLoading] = useState(true);
+  const [actionsError, setActionsError] = useState("");
+  useEffect(() => {
+    let active = true;
+    loadKnowledge("action", project.slug)
+      .then(({ items }) => {
+        if (active) {
+          setProjectActions(items);
+          setActionsError("");
+        }
+      })
+      .catch((error) => {
+        if (active) setActionsError(error.message || "Impossible de charger les manœuvres.");
+      })
+      .finally(() => { if (active) setActionsLoading(false); });
+    return () => { active = false; };
+  }, [project.slug]);
   const latestMeeting = project.meetings?.[0] || null;
   const openMeetings = (project.meetings || []).filter((meeting) => meeting.status !== "Validé");
   const sections = {
@@ -651,10 +669,17 @@ function IslandProjectView({ project, onBack }) {
     },
     manoeuvres: {
       label: "Manœuvres",
-      subtitle: "Les éléments encore ouverts dans les escales du projet",
-      items: openMeetings.length
-        ? openMeetings.map((meeting) => [meeting.title, meeting.status])
-        : [["Aucune manœuvre ouverte", "Les escales connues sont validées ou le projet n’a pas encore d’escale."]]
+      subtitle: "Actions du projet issues des journaux, avec leur état de validation",
+      items: actionsError
+        ? [["Erreur de chargement", actionsError]]
+        : actionsLoading
+          ? [["Chargement", "Lecture des actions du projet…"]]
+          : projectActions.length
+            ? projectActions.map((action) => [
+                action.action || "Action à préciser",
+                `${action.reviewStatus === "à valider" ? "À valider" : action.statut || "Validée"} · ${action.responsable || "Responsable à préciser"} · ${action.echeance || "Sans échéance"}`
+              ])
+            : [["Aucune action enregistrée", "Les actions apparaîtront après validation des journaux de bord."]]
     },
     arsenal: {
       label: "Arsenal",
@@ -823,7 +848,7 @@ export default function App() {
   };
 
   const centralView = useMemo(() => {
-    if (selectedProject) return <IslandProjectView project={selectedProject} onBack={() => setSelectedProject(null)} />;
+    if (selectedProject) return <IslandProjectView key={selectedProject.slug} project={selectedProject} onBack={() => setSelectedProject(null)} />;
     if (active === "pont") return <PontView projects={projectViewModels} meetings={meetings} onOpenProject={openProject} />;
     if (active === "iles") return <IslandsView projects={projects} meetings={meetings} loading={loadingData} error={dataError} onOpenProject={openProject} onSaved={refreshData} />;
     return <GenericView active={active} meetings={meetings} projects={projects} loading={loadingData} error={dataError} onSaved={refreshData} />;

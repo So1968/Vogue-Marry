@@ -591,7 +591,7 @@ function PriorityBoard({ projects, actions, loading, error, onOpenProject }) {
   const [showAll, setShowAll] = useState(false);
   const [filter, setFilter] = useState("all");
   const alerts = priorities.filter((project) => project.overdue > 0 || project.pending > 0 || project.upcoming > 0);
-  const displayed = priorities.filter((project) => filter === "all" || (filter === "alerts" && (project.overdue > 0 || project.pending > 0)));
+  const displayed = priorities.filter((project) => filter === "all" || (filter === "alerts" && (project.overdue > 0 || project.pending > 0 || project.upcoming > 0)));
 
   return (
     <section className="priorities-board" aria-label="Classement des îles">

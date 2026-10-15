@@ -21,6 +21,7 @@ import KnowledgeView from "./features/knowledge/KnowledgeView.jsx";
 import LogPoseView from "./features/log-pose/LogPoseView.jsx";
 import ProjectsView from "./features/projects/ProjectsView.jsx";
 import { makeProjectViewModel } from "./features/projects/project-utils.js";
+import { readLastPosition, saveLastPosition } from "./features/projects/last-position.js";
 import SearchView from "./features/search/SearchView.jsx";
 
 const MENU = [
@@ -664,24 +665,6 @@ function PontView({ projects, onOpenProject }) {
   );
 }
 
-const RESUME_KEY = "vogue-marry:last-position:v1";
-const ISLAND_SECTIONS = new Set(["carte", "cap", "journal", "manoeuvres", "arsenal"]);
-
-function readLastPosition() {
-  try {
-    const saved = JSON.parse(window.localStorage.getItem(RESUME_KEY) || "null");
-    return saved && typeof saved.slug === "string" && ISLAND_SECTIONS.has(saved.section)
-      ? saved : null;
-  } catch {
-    return null;
-  }
-}
-
-function saveLastPosition(slug, section) {
-  if (!slug || !ISLAND_SECTIONS.has(section)) return;
-  try { window.localStorage.setItem(RESUME_KEY, JSON.stringify({ slug, section })); } catch { /* stockage optionnel */ }
-}
-
 function VigieView({ projects, onOpenProject }) {
   const [actions, setActions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -896,7 +879,7 @@ function GenericView({ active, meetings, projects, loading, error, onSaved }) {
 export default function App() {
   const [active, setActive] = useState("pont");
   const [selectedProject, setSelectedProject] = useState(null);
-  const [lastPosition, setLastPosition] = useState(readLastPosition);
+  const [lastPosition, setLastPosition] = useState(() => readLastPosition(window.localStorage));
   const [knowledgeProject, setKnowledgeProject] = useState("");
   const [projects, setProjects] = useState([]);
   const [meetings, setMeetings] = useState([]);
@@ -931,7 +914,7 @@ export default function App() {
   );
 
   const onPositionChange = useCallback((slug, section) => {
-    saveLastPosition(slug, section);
+    saveLastPosition(window.localStorage, slug, section);
     setLastPosition({ slug, section });
   }, []);
 

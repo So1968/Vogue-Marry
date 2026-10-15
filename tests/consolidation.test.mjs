@@ -198,6 +198,11 @@ test("ouvrir une île affiche son Log Pose sans mélanger les projets", () => {
   const app = read("src/App.jsx");
   assert.match(app, /<LogPoseView key=\{project\.slug\} projectSlug=\{project\.slug\}/u);
   assert.match(app, /className="project-island-home"/u);
+  assert.match(app, /<PriorityBoard projects=\{projects\}/u);
+  assert.match(app, /Par nombre d’escales à traiter/u);
+  const logPose = read("src/features/log-pose/LogPoseView.jsx");
+  assert.match(logPose, /Log Pose de l’île/u);
+  assert.match(logPose, /Log Pose du Pont/u);
   assert.match(app, /onOpen=\{\(\) => setSection\("manoeuvres"\)\}/u);
 });
 

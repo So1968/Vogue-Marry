@@ -590,8 +590,8 @@ function PriorityBoard({ projects, actions, loading, error, onOpenProject }) {
   const priorities = rankProjects(projects, actions);
   const [showAll, setShowAll] = useState(false);
   const [filter, setFilter] = useState("all");
-  const alerts = priorities.filter((project) => project.overdue > 0 || project.pending > 0);
-  const displayed = priorities.filter((project) => filter === "all" || (filter === "alerts" && (project.overdue > 0 || project.pending > 0)));
+  const alerts = priorities.filter((project) => project.overdue > 0 || project.pending > 0 || project.upcoming > 0);
+  const displayed = priorities.filter((project) => filter === "all" || (filter === "alerts" && (project.overdue > 0 || project.pending > 0 || project.upcoming > 0)));
 
   return (
     <section className="priorities-board" aria-label="Classement des îles">
@@ -601,13 +601,13 @@ function PriorityBoard({ projects, actions, loading, error, onOpenProject }) {
       </div>
       {loading ? <p className="data-state">Chargement des priorités…</p> : null}
       {error ? <p className="data-state error">{error}</p> : null}
-      {!loading && !error && alerts.length ? <div className="pont-alerts" role="status"><Bell size={17} /><div><strong>{alerts.length} île{alerts.length > 1 ? "s" : ""} à surveiller</strong><div className="pont-alert-links">{alerts.map((project) => <button key={project.slug} type="button" onClick={() => onOpenProject(project)}>{project.name} · {project.overdue ? `${project.overdue} en retard` : `${project.pending} à valider`}</button>)}</div></div></div> : null}
+      {!loading && !error && alerts.length ? <div className="pont-alerts" role="status"><Bell size={17} /><div><strong>{alerts.length} île{alerts.length > 1 ? "s" : ""} à surveiller</strong><div className="pont-alert-links">{alerts.map((project) => <button key={project.slug} type="button" onClick={() => onOpenProject(project)}>{project.name} · {project.overdue ? `${project.overdue} en retard` : project.upcoming ? `${project.upcoming} échéance(s) proche(s)` : `${project.pending} à valider`}</button>)}</div></div></div> : null}
       {!loading && !error ? <div className="priorities-grid">
         {priorities.slice(0, 3).map((project, index) => (
           <article className={`priority-card ${project.tone}`} key={project.slug}>
             <span className="priority-rank">{index + 1}</span>
             <div>
-              <small>{project.overdue} en retard · {project.pending} à valider · {project.activeCount} ouvertes</small>
+              <small>{project.overdue} en retard · {project.upcoming} à échéance proche · {project.pending} à valider · {project.activeCount} ouvertes</small>
               <strong>{project.name}</strong>
               <p>{project.nearest ? `Prochaine échéance : ${project.nearest}` : project.next}</p>
               <button type="button" onClick={() => onOpenProject(project)}>Ouvrir cette île →</button>
@@ -616,7 +616,14 @@ function PriorityBoard({ projects, actions, loading, error, onOpenProject }) {
         ))}
         {!priorities.length ? <p className="data-state">Aucune île enregistrée pour le moment.</p> : null}
       </div> : null}
-      {!loading && !error ? <div className="pont-island-list">\n        <div className="pont-island-list-heading"><strong>Répertoire des îles</strong><button type="button" onClick={() => setShowAll((previous) => !previous)} aria-expanded={showAll}>{showAll ? "Masquer la liste" : `Voir les ${priorities.length} îles`}</button></div>\n        {showAll ? <>\n          <label>Afficher <select value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">Toutes les îles</option><option value="alerts">Îles avec alertes</option></select></label>\n          <ul className="pont-island-directory">{displayed.map((project) => <li key={project.slug}><button type="button" onClick={() => onOpenProject(project)}><span>{priorities.indexOf(project) + 1}. {project.name}</span><small>{project.overdue ? `${project.overdue} en retard · ` : ""}{project.pending ? `${project.pending} à valider · ` : ""}{project.activeCount} actions ouvertes</small></button></li>)}</ul>\n          {!displayed.length ? <p>Aucune île avec alerte.</p> : null}\n        </> : null}\n      </div> : null}
+      {!loading && !error ? <div className="pont-island-list">
+        <div className="pont-island-list-heading"><strong>Répertoire des îles</strong><button type="button" onClick={() => setShowAll((previous) => !previous)} aria-expanded={showAll}>{showAll ? "Masquer la liste" : `Voir les ${priorities.length} îles`}</button></div>
+        {showAll ? <>
+          <label>Afficher <select value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">Toutes les îles</option><option value="alerts">Îles avec alertes</option></select></label>
+          <ul className="pont-island-directory">{displayed.map((project) => <li key={project.slug}><button type="button" onClick={() => onOpenProject(project)}><span>{priorities.indexOf(project) + 1}. {project.name}</span><small>{project.overdue ? `${project.overdue} en retard · ` : ""}{project.pending ? `${project.pending} à valider · ` : ""}{project.upcoming ? `${project.upcoming} bientôt · ` : ""}{project.activeCount} actions ouvertes</small></button></li>)}</ul>
+          {!displayed.length ? <p>Aucune île avec alerte.</p> : null}
+        </> : null}
+      </div> : null}
     </section>
   );
 }

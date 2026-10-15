@@ -131,6 +131,32 @@ test("les API locales refusent un Host étranger", async () => {
   }
 });
 
+test("les deux API bloquent les modifications intersites", async () => {
+  for (const [script, port, healthPath] of [
+    ["backend/server.js", 8010, "health"],
+    ["backend/transcription-server-v6.js", 8011, "transcription/health"]
+  ]) {
+    await withServer(script, port, async () => {
+      const url = `http://127.0.0.1:${port}/api/verification-origine`;
+      const externalOrigin = await fetch(url, {
+        method: "POST",
+        headers: { Origin: "https://site-externe.example" }
+      });
+      assert.equal(externalOrigin.status, 403);
+      const crossSite = await fetch(url, {
+        method: "POST",
+        headers: { "Sec-Fetch-Site": "cross-site" }
+      });
+      assert.equal(crossSite.status, 403);
+      const localOrigin = await fetch(url, {
+        method: "POST",
+        headers: { Origin: "http://localhost:5173" }
+      });
+      assert.equal(localOrigin.status, 404);
+    }, healthPath);
+  }
+});
+
 test("API Longue-vue : refuse les liens symboliques vers des fichiers extérieurs", async () => {
   await withServer("backend/server.js", 8010, async (home) => {
     const projects = path.join(home, "VOGUE-MERRY-DONNEES", "01_PROJETS");

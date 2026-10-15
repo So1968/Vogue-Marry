@@ -64,6 +64,18 @@ app.use((req, res, next) => {
   next();
 });
 
+// Bloque les requêtes mutantes signalées comme intersites par le navigateur.
+// Les clients locaux sans Origin et sans Fetch Metadata restent compatibles.
+app.use((req, res, next) => {
+  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
+  const origin = req.headers.origin;
+  const fetchSite = req.headers["sec-fetch-site"];
+  if ((origin && !ALLOWED_ORIGINS.has(origin)) || fetchSite === "cross-site") {
+    return res.status(403).json({ error: "Modification depuis une origine non autorisée." });
+  }
+  next();
+});
+
 app.use(cors({
   origin(origin, callback) {
     if (!origin || ALLOWED_ORIGINS.has(origin)) return callback(null, true);

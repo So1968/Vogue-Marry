@@ -218,7 +218,7 @@ test("reprise, Vigie, Longue-vue et manœuvres ciblées", () => {
   const app = read("src/App.jsx");
   const search = read("src/features/search/SearchView.jsx");
   const knowledge = read("src/features/knowledge/KnowledgeView.jsx");
-  assert.match(app, /const RESUME_KEY/u);
+  assert.match(read("src/features/projects/last-position.js"), /const RESUME_KEY/u);
   assert.match(app, /readLastPosition/u);
   assert.match(app, /saveLastPosition/u);
   assert.match(app, /Reprendre où j’en étais/u);

@@ -210,6 +210,10 @@ button { font: inherit; }
 .treasure-chest-lock { position: absolute; top: -6px; left: 36px; width: 19px; height: 24px; border: 3px solid #e0b558; border-radius: 4px 4px 6px 6px; background: #c48c37; box-shadow: inset 0 0 0 3px #9c6726; }
 .treasure-chest-lock::after { content: ""; position: absolute; left: 5px; top: 7px; width: 3px; height: 7px; border-radius: 50%; background: #4b2b15; }
 .treasure-heading .data-count { white-space: nowrap; }
+.treasure-dropzone { display: grid; gap: 5px; margin-bottom: 12px; padding: 20px; border: 2px dashed #ae8043; border-radius: 10px; background: #f5e5bd; color: #46311b; text-align: center; font: .83rem Arial,sans-serif; }
+.treasure-dropzone strong { font-size: .93rem; }
+.treasure-dropzone span { color: #705438; }
+.treasure-dropzone.is-dragging { border-color: #1b718a; background: #fcebb1; box-shadow: 0 0 0 3px rgba(27,113,138,.3); }
 .documents-toolbar { margin-bottom: 18px; padding: 13px 15px; display: flex; align-items: end; justify-content: space-between; gap: 14px; color: #4d3b25; border: 1px solid #8d6431; border-radius: 9px; background: linear-gradient(180deg,#fff1ca,#e5c785); }
 .documents-toolbar label { display: grid; gap: 5px; color: #6d542f; font: 700 .67rem Arial,sans-serif; letter-spacing: .04em; text-transform: uppercase; }
 .documents-toolbar select { min-width: 190px; padding: 8px 9px; color: #332715; border: 1px solid rgba(112,75,28,.34); border-radius: 6px; background: rgba(255,255,255,.65); font: .78rem Arial,sans-serif; }

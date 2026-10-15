@@ -64,6 +64,7 @@ export default function DocumentsView({ projects = [] }) {
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [dragging, setDragging] = useState(false);
 
   const refreshDocuments = useCallback(async () => {
     setLoading(true);
@@ -83,24 +84,42 @@ export default function DocumentsView({ projects = [] }) {
     refreshDocuments();
   }, [refreshDocuments]);
 
-  async function handleDeposit(event) {
-    const file = event.target.files?.[0];
-    event.target.value = "";
-    if (!file) return;
-
+  async function depositFiles(files) {
+    const selected = Array.from(files || []);
+    if (!selected.length || busy) return;
     setBusy("upload");
     setError("");
     setNotice("");
+    let completed = 0;
+    const failures = [];
     try {
-      const payload = await depositDocument(file);
-      const suggestion = payload.deposit?.analysis?.category || "document à classer";
-      setNotice(`Document déposé dans Water Seven. Proposition : ${suggestion}.`);
-      await refreshDocuments();
-    } catch (requestError) {
-      setError(requestError.message || "Impossible de déposer ce document.");
+      for (const file of selected) {
+        try {
+          await depositDocument(file);
+          completed += 1;
+        } catch (requestError) {
+          failures.push(`${file.name} : ${requestError.message || "dépôt impossible"}`);
+        }
+      }
+      if (completed) setNotice(`${completed} document${completed > 1 ? "s" : ""} déposé${completed > 1 ? "s" : ""} dans le Coffre, à vérifier et classer.`);
+      if (failures.length) setError(`${failures.length} échec(s) : ${failures.join(" ; ")}`);
+      if (completed) await refreshDocuments();
     } finally {
       setBusy("");
     }
+  }
+
+  function handleDeposit(event) {
+    const selected = Array.from(event.target.files || []);
+    event.target.value = "";
+    void depositFiles(selected);
+  }
+
+  function handleDrop(event) {
+    event.preventDefault();
+    setDragging(false);
+    if (busy || !event.dataTransfer.files?.length) return;
+    void depositFiles(event.dataTransfer.files);
   }
 
   function chooseProject(documentId, projectSlug) {
@@ -136,6 +155,14 @@ export default function DocumentsView({ projects = [] }) {
         <div className="treasure-heading"><div className="treasure-chest" aria-hidden="true"><div className="treasure-chest-lid" /><div className="treasure-chest-body"><span className="treasure-chest-lock" /></div></div><span className="data-count">{pendingCount ? `${pendingCount} à valider` : documents.length}</span></div>
       </div>
 
+      <div className={`treasure-dropzone${dragging ? " is-dragging" : ""}`}
+        onDragOver={(event) => { if (!busy) { event.preventDefault(); setDragging(true); } }}
+        onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setDragging(false); }}
+        onDrop={handleDrop}>
+        <strong>Glissez vos documents dans le Coffre au trésor</strong>
+        <span>Ou utilisez le bouton « Déposer des documents » ci-dessous. Plusieurs fichiers possibles.</span>
+      </div>
+
       <div className="documents-toolbar">
         <label>
           Filtrer par île
@@ -145,8 +172,8 @@ export default function DocumentsView({ projects = [] }) {
           </select>
         </label>
         <label className="document-upload-button">
-          <span>{busy === "upload" ? "Dépôt…" : "Déposer un document"}</span>
-          <input type="file" onChange={handleDeposit} disabled={busy === "upload"} />
+          <span>{busy === "upload" ? "Dépôt…" : "Déposer des documents"}</span>
+          <input type="file" multiple onChange={handleDeposit} disabled={busy === "upload"} />
         </label>
       </div>
 

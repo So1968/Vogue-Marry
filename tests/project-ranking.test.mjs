@@ -25,3 +25,25 @@ test("Les préalertes couvrent aujourd’hui et les deux prochains jours", () =>
  assert.equal(ranked.find(p=>p.slug==="b").upcoming,0);
  assert.equal(ranked.find(p=>p.slug==="b").overdue,1);
 });
+
+test("Date invalide et échéance au changement de jour local", () => {
+ const projects = [{ slug: "alpha", name: "Alpha" }];
+ const actions = [
+  { projectSlug: "alpha", statut: "En cours", echeance: "2026-02-30" },
+  { projectSlug: "alpha", statut: "En cours", echeance: "2026-03-01" },
+  { projectSlug: "alpha", statut: "Terminé", echeance: "2026-02-28" }
+ ];
+ const ranked = rankProjects(projects, actions, new Date("2026-02-28T12:00:00Z"));
+ assert.equal(ranked[0].overdue, 0);
+ assert.equal(ranked[0].upcoming, 1);
+ assert.equal(ranked[0].nearest, "2026-03-01");
+});
+test("Date non structurée ne crée jamais de fausse alerte", () => {
+ const ranked = rankProjects([{slug:"a",name:"A"}], [
+  { projectSlug:"a", statut:"En cours", echeance:"demain" },
+  { projectSlug:"a", reviewStatus:"à valider", echeance:"2026-10-01" }
+ ], new Date("2026-10-15T12:00:00Z"));
+ assert.equal(ranked[0].overdue, 0);
+ assert.equal(ranked[0].upcoming, 0);
+ assert.equal(ranked[0].pending, 1);
+});

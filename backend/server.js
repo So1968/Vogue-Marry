@@ -55,6 +55,15 @@ const DOCUMENT_EXTENSIONS = new Set([
   ".yml"
 ]);
 
+// Refuse les noms d'hôte arbitraires, y compris en cas de DNS rebinding.
+app.use((req, res, next) => {
+  const allowedHosts = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
+  if (!allowedHosts.has(req.headers.host)) {
+    return res.status(403).json({ error: "Hôte local non autorisé." });
+  }
+  next();
+});
+
 app.use(cors({
   origin(origin, callback) {
     if (!origin || ALLOWED_ORIGINS.has(origin)) return callback(null, true);

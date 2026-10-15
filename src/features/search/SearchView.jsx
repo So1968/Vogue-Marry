@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { readMemorySource, searchMemory } from "../../lib/local-api.js";
 
-export default function SearchView({ projects = [] }) {
+export default function SearchView({ projects = [], onOpenProject }) {
   const [query, setQuery] = useState("");
   const [projectFilter, setProjectFilter] = useState("");
   const [results, setResults] = useState([]);
@@ -57,6 +57,7 @@ export default function SearchView({ projects = [] }) {
           <p>La recherche parcourt les journaux, sources et notes enregistrés localement.</p>
         </div>
       </div>
+      <section className="longuevue-islands" aria-label="Toutes les îles"><h3>Toutes les îles ({projects.length})</h3>{projects.length ? <div className="longuevue-links">{projects.map((project) => <button type="button" key={project.slug} onClick={() => onOpenProject?.(project)} disabled={!onOpenProject}>{project.name} →</button>)}</div> : <p>Aucune île enregistrée.</p>}</section>
       <form className="search-form" onSubmit={handleSubmit}>
         <label htmlFor="memory-search">Mot ou expression</label>
         <div>

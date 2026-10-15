@@ -140,11 +140,11 @@ function KnowledgeCard({ item, kind, onValidate, busy }) {
   );
 }
 
-export default function KnowledgeView({ kind, projects = [] }) {
+export default function KnowledgeView({ kind, projects = [], initialProjectFilter = "" }) {
   const config = VIEW_CONFIG[kind];
   const [items, setItems] = useState([]);
   const [pendingCount, setPendingCount] = useState(0);
-  const [projectFilter, setProjectFilter] = useState("");
+  const [projectFilter, setProjectFilter] = useState(initialProjectFilter);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");

@@ -64,6 +64,7 @@ function KnowledgeCard({ item, kind, onValidate, busy }) {
   const config = VIEW_CONFIG[kind];
   const [draft, setDraft] = useState(() => draftFromItem(item, kind));
   const pending = item.reviewStatus === "à valider";
+  const textField = kind === "action" ? "action" : kind === "decision" ? "decision" : "need";
 
   function updateField(field, value) {
     setDraft((current) => ({ ...current, [field]: value }));
@@ -86,7 +87,7 @@ function KnowledgeCard({ item, kind, onValidate, busy }) {
         <div className="knowledge-edit-form">
           <label>
             {config.textLabel}
-            <textarea value={draft[kind === "action" ? "action" : "decision"]} onChange={(event) => updateField(kind === "action" ? "action" : "decision", event.target.value)} rows={3} />
+            <textarea value={draft[textField]} onChange={(event) => updateField(textField, event.target.value)} rows={3} />
           </label>
           {kind === "action" ? (
             <div className="knowledge-edit-grid">

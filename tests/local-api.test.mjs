@@ -110,6 +110,36 @@ test("API mémoire : santé locale, CORS local et refus des chemins dangereux", 
   });
 });
 
+test("API Longue-vue : refuse les liens symboliques vers des fichiers extérieurs", async () => {
+  await withServer("backend/server.js", 8010, async (home) => {
+    const projects = path.join(home, "VOGUE-MERRY-DONNEES", "01_PROJETS");
+    const island = path.join(projects, "ile_test");
+    fs.mkdirSync(island, { recursive: true });
+    const outside = path.join(home, "confidentiel.txt");
+    fs.writeFileSync(outside, "SECRET_LIEN_EXTERIEUR", "utf8");
+    fs.symlinkSync(outside, path.join(island, "raccourci.txt"));
+    const linkedDir = path.join(home, "documents_exterieurs");
+    fs.mkdirSync(linkedDir);
+    fs.writeFileSync(path.join(linkedDir, "memo.md"), "SECRET_DOSSIER_EXTERIEUR", "utf8");
+    fs.symlinkSync(linkedDir, path.join(island, "raccourci_dossier"), "dir");
+
+    const base = "http://127.0.0.1:8010";
+    const search = await fetch(`${base}/api/search?q=SECRET_LIEN_EXTERIEUR`);
+    assert.equal(search.status, 200);
+    assert.equal((await search.json()).count, 0);
+    const folderSearch = await fetch(`${base}/api/search?q=SECRET_DOSSIER_EXTERIEUR`);
+    assert.equal(folderSearch.status, 200);
+    assert.equal((await folderSearch.json()).count, 0);
+
+    const filePath = encodeURIComponent("ile_test/raccourci.txt");
+    const read = await fetch(`${base}/api/search/read?relativePath=${filePath}`);
+    assert.equal(read.status, 400);
+    const folderPath = encodeURIComponent("ile_test/raccourci_dossier/memo.md");
+    const folderRead = await fetch(`${base}/api/search/read?relativePath=${folderPath}`);
+    assert.equal(folderRead.status, 400);
+  });
+});
+
 test("API mémoire : crée une escale, rattache un audio et la retrouve", async () => {
   await withServer("backend/server.js", 8010, async () => {
     const requestOptions = {

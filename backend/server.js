@@ -136,6 +136,15 @@ function safePathInside(root, ...segments) {
   return resolved;
 }
 
+function safeExistingFileInside(root, filePath) {
+  const realRoot = fs.realpathSync(root);
+  const realFile = fs.realpathSync(filePath);
+  if (!realFile.startsWith(realRoot + path.sep)) {
+    throw new Error("Source située hors du dossier autorisé.");
+  }
+  return realFile;
+}
+
 function timestampForFile() {
   return new Date().toISOString().replace("T", "_").replace(/:/g, "-").replace(/\..+/, "");
 }
@@ -1619,10 +1628,11 @@ app.post("/api/knowledge/:kind/validate", (req, res) => {
 });
 
 function walkFiles(dirPath, files = [], { includeHistory = false } = {}) {
-  if (!fs.existsSync(dirPath)) return files;
+  if (!fs.existsSync(dirPath) || fs.lstatSync(dirPath).isSymbolicLink()) return files;
 
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
   for (const entry of entries) {
+    if (entry.isSymbolicLink()) continue;
     const fullPath = path.join(dirPath, entry.name);
     if (entry.isDirectory()) {
       if (entry.name === "99_versions" && !includeHistory) continue;
@@ -1659,7 +1669,7 @@ app.get("/api/search", (req, res) => {
 
     for (const root of roots) {
       for (const filePath of walkFiles(root, [], { includeHistory })) {
-        const content = fs.readFileSync(filePath, "utf8");
+        const content = fs.readFileSync(safeExistingFileInside(PROJECTS_ROOT, filePath), "utf8");
         if (content.toLowerCase().includes(query.toLowerCase())) {
           const relativePath = path.relative(PROJECTS_ROOT, filePath);
           const parts = relativePath.split(path.sep);
@@ -1697,7 +1707,7 @@ app.get("/api/search/read", (req, res) => {
     if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) throw new Error("Source introuvable.");
     if (![".md", ".json", ".txt"].includes(path.extname(filePath).toLowerCase())) throw new Error("Type de source non lisible.");
 
-    const content = fs.readFileSync(filePath, "utf8");
+    const content = fs.readFileSync(safeExistingFileInside(PROJECTS_ROOT, filePath), "utf8");
     res.json({
       relativePath: path.relative(PROJECTS_ROOT, filePath),
       fileName: path.basename(filePath),

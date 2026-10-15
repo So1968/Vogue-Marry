@@ -5,7 +5,7 @@ const SAFE_SLUG = /^[a-z0-9]+(?:_[a-z0-9]+)*$/u;
 export function readLastPosition(storage) {
   try {
     const saved = JSON.parse(storage?.getItem(RESUME_KEY) || "null");
-    return saved && SAFE_SLUG.test(saved.slug) && ISLAND_SECTIONS.has(saved.section)
+    return saved && typeof saved.slug === "string" && SAFE_SLUG.test(saved.slug) && ISLAND_SECTIONS.has(saved.section)
       ? { slug: saved.slug, section: saved.section } : null;
   } catch {
     return null;

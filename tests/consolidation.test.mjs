@@ -209,6 +209,13 @@ test("ouvrir une île affiche son Log Pose sans mélanger les projets", () => {
   assert.match(logPose, /onNavigate\("cap"\)/u);
 });
 
+test("le Pont limite le classement visible sans retirer les îles de la carte", () => {
+  const app = read("src/App.jsx");
+  assert.match(app, /priorities\.slice\(0, 3\)/u);
+  assert.match(app, /priorities\.length - 3/u);
+  assert.match(app, /<SeaMap projects=\{projects\} onOpenProject=\{onOpenProject\}/u);
+});
+
 test("une île affiche les actions de son projet et non les réunions ouvertes", () => {
   const app = read("src/App.jsx");
   assert.match(app, /loadKnowledge\("action", project\.slug\)/u);

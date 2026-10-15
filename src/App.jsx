@@ -103,7 +103,7 @@ button { font: inherit; }
 .priorities-heading { margin-bottom: 9px; display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
 .priorities-heading strong { font-size: 1.05rem; font-weight: 600; }
 .priorities-heading span { color: #c9b78b; font: .72rem Arial,sans-serif; }
-.priorities-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; }
+.priority-more { margin: 8px 0 0; color: #e2cca3; font: .74rem Arial,sans-serif; }\n.priority-card button { margin-top: 8px; padding: 6px 9px; color: #433018; background: #f9edce; border: 1px solid #a68043; border-radius: 5px; cursor: pointer; font: 700 .7rem Arial,sans-serif; }\n.priority-card button:focus-visible { outline: 3px solid #0b6175; outline-offset: 2px; }\n.priorities-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; }
 .priority-card { min-width: 0; padding: 9px 11px; display: grid; grid-template-columns: 28px minmax(0,1fr); gap: 9px; color: #382b18; background: linear-gradient(180deg,#f7e4b5,#dfc17f); border: 1px solid #8d6431; border-radius: 7px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.34); }
 .priority-rank { width: 25px; height: 25px; display: grid; place-items: center; border-radius: 50%; color: #f8e5b4; background: #6c4421; font: 700 .72rem Arial,sans-serif; }
 .priority-card.red .priority-rank { background: #8f3933; }
@@ -586,7 +586,7 @@ function SeaMap({ projects, onOpenProject }) {
 }
 
 function PriorityBoard({ projects, actions, loading, error, onOpenProject }) {
-  // Classement transparent : d'abord les escales ouvertes, puis leur date la plus récente.
+  // Classement transparent des projets à partir des actions reconnues.
   const priorities = rankProjects(projects, actions);
 
   return (
@@ -598,7 +598,7 @@ function PriorityBoard({ projects, actions, loading, error, onOpenProject }) {
       {loading ? <p className="data-state">Chargement des priorités…</p> : null}
       {error ? <p className="data-state error">{error}</p> : null}
       {!loading && !error ? <div className="priorities-grid">
-        {priorities.map((project, index) => (
+        {priorities.slice(0, 3).map((project, index) => (
           <article className={`priority-card ${project.tone}`} key={project.slug}>
             <span className="priority-rank">{index + 1}</span>
             <div>
@@ -611,6 +611,7 @@ function PriorityBoard({ projects, actions, loading, error, onOpenProject }) {
         ))}
         {!priorities.length ? <p className="data-state">Aucune île enregistrée pour le moment.</p> : null}
       </div> : null}
+      {!loading && !error && priorities.length > 3 ? <p className="priority-more">{priorities.length - 3} autre(s) île(s) accessibles sur la carte maritime ci-dessous.</p> : null}
     </section>
   );
 }

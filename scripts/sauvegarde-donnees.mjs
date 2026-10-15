@@ -66,6 +66,7 @@ try {
     const source = path.resolve(first || sourceDefault);
     const destination = second && path.resolve(second);
     if (!destination) fail("Usage : backup [source] <destination-nouvelle>");
+    if (destination === source || destination.startsWith(source + path.sep)) fail("Destination à placer hors de la source.");
     if (!fs.statSync(source).isDirectory()) fail("Source introuvable.");
     const original = inspect(source);
     ensureNestedParent(path.dirname(destination));

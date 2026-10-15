@@ -194,6 +194,16 @@ test("le Log Pose persiste et reprend les validations", () => {
   assert.equal(exists("src/features/log-pose/LogPoseView.jsx"), true);
 });
 
+test("le Coffre est un coffre au trésor et garde la validation du rangement", () => {
+  const app = read("src/App.jsx");
+  const docs = read("src/features/documents/DocumentsView.jsx");
+  assert.match(app, /\.treasure-chest-lid/u);
+  assert.match(app, /\.treasure-chest-lock/u);
+  assert.match(docs, /Le Coffre aux trésors/u);
+  assert.match(docs, /aria-hidden="true"/u);
+  assert.match(docs, /validateDocument\(\{ sourceId: document\.id, projectSlug \}\)/u);
+});
+
 test("ouvrir une île affiche son Log Pose sans mélanger les projets", () => {
   const app = read("src/App.jsx");
   assert.match(app, /<LogPoseView key=\{project\.slug\} projectSlug=\{project\.slug\}/u);

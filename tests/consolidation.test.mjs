@@ -214,6 +214,22 @@ test("le coffre accepte plusieurs fichiers et le glisser déposer", () => {
  assert.match(docs, /await refreshDocuments\(\)/u);
 });
 
+test("reprise, Vigie, Longue-vue et manœuvres ciblées", () => {
+  const app = read("src/App.jsx");
+  const search = read("src/features/search/SearchView.jsx");
+  const knowledge = read("src/features/knowledge/KnowledgeView.jsx");
+  assert.match(app, /const RESUME_KEY/u);
+  assert.match(app, /readLastPosition/u);
+  assert.match(app, /saveLastPosition/u);
+  assert.match(app, /Reprendre où j’en étais/u);
+  assert.match(app, /function VigieView/u);
+  assert.match(app, /active === "vigie"/u);
+  assert.match(search, /Toutes les îles/u);
+  assert.match(search, /onOpenProject/u);
+  assert.match(knowledge, /initialProjectFilter/u);
+  assert.match(app, /onOpenManoeuvres/u);
+});
+
 test("ouvrir une île affiche son Log Pose sans mélanger les projets", () => {
   const app = read("src/App.jsx");
   assert.match(app, /<LogPoseView key=\{project\.slug\} projectSlug=\{project\.slug\}/u);

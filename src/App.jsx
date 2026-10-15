@@ -99,7 +99,7 @@ button { font: inherit; }
 
 .stage-content { min-height: 0; background: #173f4e; }
 .pont-view { height: 100%; min-height: 470px; display: grid; grid-template-rows: auto minmax(0,1fr); overflow: hidden; background: #173f4e; }
-.priorities-board { padding: 12px 18px 11px; color: #f1dca6; background: linear-gradient(180deg,#0a3446,#082a3a); border-bottom: 2px solid #8d6633; box-shadow: inset 0 -10px 20px rgba(0,0,0,.16); }
+.priorities-board { max-height: 50vh; overflow-y: auto; padding: 12px 18px 11px; color: #f1dca6; background: linear-gradient(180deg,#0a3446,#082a3a); border-bottom: 2px solid #8d6633; box-shadow: inset 0 -10px 20px rgba(0,0,0,.16); }
 .priorities-heading { margin-bottom: 9px; display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
 .priorities-heading strong { font-size: 1.05rem; font-weight: 600; }
 .priorities-heading span { color: #c9b78b; font: .72rem Arial,sans-serif; }

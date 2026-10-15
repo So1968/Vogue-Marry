@@ -230,6 +230,17 @@ test("reprise, Vigie, Longue-vue et manœuvres ciblées", () => {
   assert.match(app, /onOpenManoeuvres/u);
 });
 
+test("les manœuvres validées peuvent changer de statut avec historique", () => {
+ const backend = read("backend/server.js");
+ const localApi = read("src/lib/local-api.js");
+ const knowledge = read("src/features/knowledge/KnowledgeView.jsx");
+ assert.match(backend, /\/api\/knowledge\/action\/update-status/u);
+ assert.match(backend, /createFileVersion\(jsonPath, "avant_statut"\)/u);
+ assert.match(backend, /syncLogPose\(projectSlug\)/u);
+ assert.match(localApi, /updateActionStatus/u);
+ assert.match(knowledge, /onUpdateStatus/u);
+});
+
 test("ouvrir une île affiche son Log Pose sans mélanger les projets", () => {
   const app = read("src/App.jsx");
   assert.match(app, /<LogPoseView key=\{project\.slug\} projectSlug=\{project\.slug\}/u);

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { loadKnowledge, validateKnowledge } from "../../lib/local-api.js";
+import { loadKnowledge, validateKnowledge, updateActionStatus } from "../../lib/local-api.js";
 
 const VIEW_CONFIG = {
   action: {
@@ -60,10 +60,12 @@ function draftFromItem(item, kind) {
       };
 }
 
-function KnowledgeCard({ item, kind, onValidate, busy }) {
+function KnowledgeCard({ item, kind, onValidate, onUpdateStatus, busy }) {
   const config = VIEW_CONFIG[kind];
   const [draft, setDraft] = useState(() => draftFromItem(item, kind));
   const pending = item.reviewStatus === "à valider";
+  const [nextStatus, setNextStatus] = useState(item.statut || "À préciser");
+  useEffect(() => { setNextStatus(item.statut || "À préciser"); }, [item.statut]);
   const textField = kind === "action" ? "action" : kind === "decision" ? "decision" : "need";
 
   function updateField(field, value) {
@@ -121,6 +123,7 @@ function KnowledgeCard({ item, kind, onValidate, busy }) {
               <div><strong>Responsable</strong><span>{item.responsable || "À préciser"}</span></div>
               <div><strong>Échéance</strong><span>{item.echeance || "À préciser"}</span></div>
               <div><strong>Statut</strong><span>{item.statut || "À préciser"}</span></div>
+              <div className="knowledge-status-change"><label>Mettre à jour le statut<select value={nextStatus} onChange={(event) => setNextStatus(event.target.value)} disabled={busy}>{!["À préciser", "À faire", "En cours", "Bloqué", "Terminé"].includes(nextStatus) ? <option value={nextStatus}>{nextStatus}</option> : null}{["À préciser", "À faire", "En cours", "Bloqué", "Terminé"].map((value) => <option key={value} value={value}>{value}</option>)}</select></label><button type="button" onClick={() => onUpdateStatus(item, nextStatus)} disabled={busy || nextStatus === (item.statut || "À préciser")}>{busy ? "Enregistrement…" : "Enregistrer le statut"}</button></div>
             </>
           ) : kind === "decision" ? (
             <>
@@ -188,6 +191,21 @@ export default function KnowledgeView({ kind, projects = [], initialProjectFilte
     }
   }
 
+  async function handleUpdateStatus(item, statut) {
+    setBusy(item.id);
+    setError("");
+    setNotice("");
+    try {
+      await updateActionStatus({ projectSlug: item.projectSlug, itemId: item.id, statut });
+      setNotice(`Statut de la manœuvre mis à jour sur ${item.projectName}.`);
+      await refresh();
+    } catch (requestError) {
+      setError(requestError.message || "Impossible de modifier le statut.");
+    } finally {
+      setBusy("");
+    }
+  }
+
   return (
     <section className="generic-view knowledge-view">
       <div className="data-toolbar">
@@ -220,7 +238,7 @@ export default function KnowledgeView({ kind, projects = [], initialProjectFilte
       ) : null}
       <div className="knowledge-list">
         {items.map((item) => (
-          <KnowledgeCard key={item.id} item={item} kind={kind} onValidate={handleValidate} busy={busy === item.id} />
+          <KnowledgeCard key={item.id} item={item} kind={kind} onValidate={handleValidate} onUpdateStatus={handleUpdateStatus} busy={busy === item.id} />
         ))}
       </div>
     </section>

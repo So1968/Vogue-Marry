@@ -103,7 +103,7 @@ button { font: inherit; }
 .priorities-heading { margin-bottom: 9px; display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
 .priorities-heading strong { font-size: 1.05rem; font-weight: 600; }
 .priorities-heading span { color: #c9b78b; font: .72rem Arial,sans-serif; }
-.priority-more { margin: 8px 0 0; color: #e2cca3; font: .74rem Arial,sans-serif; }\n.priority-card button { margin-top: 8px; padding: 6px 9px; color: #433018; background: #f9edce; border: 1px solid #a68043; border-radius: 5px; cursor: pointer; font: 700 .7rem Arial,sans-serif; }\n.priority-card button:focus-visible { outline: 3px solid #0b6175; outline-offset: 2px; }\n.priorities-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; }
+.pont-alerts { display: flex; align-items: center; gap: 9px; margin: 9px 0; color: #ffe2a0; font: 700 .75rem Arial,sans-serif; }\n.pont-island-list { margin-top: 10px; color: #f1dca6; font: .75rem Arial,sans-serif; }\n.pont-island-list-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }\n.pont-island-list button { cursor: pointer; border: 1px solid #a4844f; border-radius: 5px; background: #efd9a5; color: #392916; padding: 6px 10px; font: 700 .72rem Arial,sans-serif; }\n.pont-island-list label { display: block; margin-top: 10px; }\n.pont-island-list select { margin-left: 6px; padding: 5px; }\n.pont-island-directory { max-height: 210px; overflow: auto; list-style: none; padding: 0; display: grid; gap: 5px; }\n.pont-island-directory button { width: 100%; display: flex; justify-content: space-between; gap: 10px; text-align: left; }\n.pont-island-directory small { font-weight: 400; }\n.priority-more { margin: 8px 0 0; color: #e2cca3; font: .74rem Arial,sans-serif; }\n.priority-card button { margin-top: 8px; padding: 6px 9px; color: #433018; background: #f9edce; border: 1px solid #a68043; border-radius: 5px; cursor: pointer; font: 700 .7rem Arial,sans-serif; }\n.priority-card button:focus-visible { outline: 3px solid #0b6175; outline-offset: 2px; }\n.priorities-grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 9px; }
 .priority-card { min-width: 0; padding: 9px 11px; display: grid; grid-template-columns: 28px minmax(0,1fr); gap: 9px; color: #382b18; background: linear-gradient(180deg,#f7e4b5,#dfc17f); border: 1px solid #8d6431; border-radius: 7px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.34); }
 .priority-rank { width: 25px; height: 25px; display: grid; place-items: center; border-radius: 50%; color: #f8e5b4; background: #6c4421; font: 700 .72rem Arial,sans-serif; }
 .priority-card.red .priority-rank { background: #8f3933; }
@@ -588,6 +588,10 @@ function SeaMap({ projects, onOpenProject }) {
 function PriorityBoard({ projects, actions, loading, error, onOpenProject }) {
   // Classement transparent des projets à partir des actions reconnues.
   const priorities = rankProjects(projects, actions);
+  const [showAll, setShowAll] = useState(false);
+  const [filter, setFilter] = useState("all");
+  const alerts = priorities.filter((project) => project.overdue > 0 || project.pending > 0);
+  const displayed = priorities.filter((project) => filter === "all" || (filter === "alerts" && (project.overdue > 0 || project.pending > 0)));
 
   return (
     <section className="priorities-board" aria-label="Classement des îles">
@@ -597,6 +601,7 @@ function PriorityBoard({ projects, actions, loading, error, onOpenProject }) {
       </div>
       {loading ? <p className="data-state">Chargement des priorités…</p> : null}
       {error ? <p className="data-state error">{error}</p> : null}
+      {!loading && !error && alerts.length ? <div className="pont-alerts" role="status"><Bell size={17} /> {alerts.length} île{alerts.length > 1 ? "s" : ""} avec des actions en retard ou à valider, même hors des trois premières.</div> : null}
       {!loading && !error ? <div className="priorities-grid">
         {priorities.slice(0, 3).map((project, index) => (
           <article className={`priority-card ${project.tone}`} key={project.slug}>
@@ -611,7 +616,7 @@ function PriorityBoard({ projects, actions, loading, error, onOpenProject }) {
         ))}
         {!priorities.length ? <p className="data-state">Aucune île enregistrée pour le moment.</p> : null}
       </div> : null}
-      {!loading && !error && priorities.length > 3 ? <p className="priority-more">{priorities.length - 3} autre(s) île(s) accessibles sur la carte maritime ci-dessous.</p> : null}
+      {!loading && !error ? <div className="pont-island-list">\n        <div className="pont-island-list-heading"><strong>Répertoire des îles</strong><button type="button" onClick={() => setShowAll((previous) => !previous)} aria-expanded={showAll}>{showAll ? "Masquer la liste" : `Voir les ${priorities.length} îles`}</button></div>\n        {showAll ? <>\n          <label>Afficher <select value={filter} onChange={(event) => setFilter(event.target.value)}><option value="all">Toutes les îles</option><option value="alerts">Îles avec alertes</option></select></label>\n          <ul className="pont-island-directory">{displayed.map((project, index) => <li key={project.slug}><button type="button" onClick={() => onOpenProject(project)}><span>{priorities.indexOf(project) + 1}. {project.name}</span><small>{project.overdue ? `${project.overdue} en retard · ` : ""}{project.pending ? `${project.pending} à valider · ` : ""}{project.activeCount} actions ouvertes</small></button></li>)}</ul>\n          {!displayed.length ? <p>Aucune île avec alerte.</p> : null}\n        </> : null}\n      </div> : null}
     </section>
   );
 }

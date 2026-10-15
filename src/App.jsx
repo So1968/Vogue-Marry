@@ -400,7 +400,7 @@ button { font: inherit; }
 .mind-detail-item strong { display: block; font-size: .79rem; }
 .mind-detail-item span { display: block; margin-top: 3px; color: #6c593c; font: .67rem/1.3 Arial,sans-serif; }
 
-.log-pose { min-height: 0; padding: 22px 25px 16px; display: flex; flex-direction: column; overflow: auto; color: #372916; background: linear-gradient(rgba(255,255,255,.24),rgba(255,255,255,.04)),repeating-linear-gradient(0deg,rgba(112,75,28,.035) 0 1px,transparent 2px 6px),#ead7aa; box-shadow: inset 18px 0 34px rgba(80,48,14,.13); }
+.project-island-home { display: grid; grid-template-columns: minmax(260px, .8fr) minmax(0, 2fr); gap: 18px; align-items: start; }\n.project-island-home .log-pose { min-height: 500px; border-radius: 16px; }\n@media (max-width: 1100px) { .project-island-home { grid-template-columns: minmax(0, 1fr); } .project-island-home .log-pose { min-height: auto; } }\n.log-pose { min-height: 0; padding: 22px 25px 16px; display: flex; flex-direction: column; overflow: auto; color: #372916; background: linear-gradient(rgba(255,255,255,.24),rgba(255,255,255,.04)),repeating-linear-gradient(0deg,rgba(112,75,28,.035) 0 1px,transparent 2px 6px),#ead7aa; box-shadow: inset 18px 0 34px rgba(80,48,14,.13); }
 .log-pose h2 { margin: 0; text-align: center; font-size: 2rem; font-weight: 500; }
 .log-ornament { width: 90px; height: 1px; margin: 10px auto 16px; background: #9d7845; }
 .log-compass { width: 132px; height: 132px; min-width: 132px; min-height: 132px; flex: 0 0 132px; aspect-ratio: 1 / 1; margin: 0 auto 16px; display: grid; place-items: center; color: #77501f; border: 9px double #7d5224; border-radius: 50%; background: radial-gradient(circle,#4cb1ca 0 20%,#0f6b85 21% 49%,#d5aa52 50% 53%,#6f461e 54%); box-shadow: 0 12px 24px rgba(70,42,12,.25),inset 0 0 20px rgba(255,255,255,.34); }
@@ -684,7 +684,9 @@ function IslandProjectView({ project, onBack }) {
       </div>
 
       {section === "carte" ? (
-        <section className="mind-map-shell" aria-label="Carte mentale du projet">
+        <div className="project-island-home">
+          <LogPoseView key={project.slug} projectSlug={project.slug} onOpen={() => setSection("manoeuvres")} />
+          <section className="mind-map-shell" aria-label="Carte mentale du projet">
           <div className="mind-map-heading">
             <small>{project.island}</small>
             <h3>Carte mentale</h3>
@@ -734,7 +736,8 @@ function IslandProjectView({ project, onBack }) {
               </div>
             </div>
           </div>
-        </section>
+          </section>
+        </div>
       ) : (
         <article className="world-section">
           <div className="world-section-header">

@@ -14,6 +14,7 @@ import {
   Telescope
 } from "lucide-react";
 import { loadInbox, loadKnowledge, loadProjects } from "./lib/local-api.js";
+import { rankProjects } from "./features/projects/project-ranking.js";
 import MeetingsView from "./features/meetings/MeetingsView.jsx";
 import DocumentsView from "./features/documents/DocumentsView.jsx";
 import KnowledgeView from "./features/knowledge/KnowledgeView.jsx";
@@ -584,43 +585,50 @@ function SeaMap({ projects, onOpenProject }) {
   );
 }
 
-function PriorityBoard({ projects }) {
+function PriorityBoard({ projects, actions, loading, error, onOpenProject }) {
   // Classement transparent : d'abord les escales ouvertes, puis leur date la plus récente.
-  const priorities = [...projects]
-    .map((project) => ({
-      ...project,
-      openCount: (project.meetings || []).filter((meeting) => meeting.status !== "Validé").length,
-      latestDate: project.meetings?.[0]?.date || ""
-    }))
-    .sort((a, b) => b.openCount - a.openCount || String(b.latestDate).localeCompare(String(a.latestDate)) || a.name.localeCompare(b.name));
+  const priorities = rankProjects(projects, actions);
 
   return (
     <section className="priorities-board" aria-label="Classement des îles">
       <div className="priorities-heading">
         <strong>Vue d’ensemble · Classement des îles</strong>
-        <span>Par nombre d’escales à traiter, puis par date de dernière escale</span>
+        <span>Actions en retard, validations attendues, actions ouvertes, puis échéance</span>
       </div>
-      <div className="priorities-grid">
+      {loading ? <p className="data-state">Chargement des priorités…</p> : null}
+      {error ? <p className="data-state error">{error}</p> : null}
+      {!loading && !error ? <div className="priorities-grid">
         {priorities.map((project, index) => (
           <article className={`priority-card ${project.tone}`} key={project.slug}>
             <span className="priority-rank">{index + 1}</span>
             <div>
-              <small>{project.openCount} escale{project.openCount > 1 ? "s" : ""} à traiter</small>
+              <small>{project.overdue} en retard · {project.pending} à valider · {project.activeCount} ouvertes</small>
               <strong>{project.name}</strong>
-              <p>{project.next}</p>
+              <p>{project.nearest ? `Prochaine échéance : ${project.nearest}` : project.next}</p>
+              <button type="button" onClick={() => onOpenProject(project)}>Ouvrir cette île →</button>
             </div>
           </article>
         ))}
         {!priorities.length ? <p className="data-state">Aucune île enregistrée pour le moment.</p> : null}
-      </div>
+      </div> : null}
     </section>
   );
 }
 
 function PontView({ projects, onOpenProject }) {
+  const [actions, setActions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    loadKnowledge("action").then(({ items }) => { if (active) setActions(items); })
+      .catch((problem) => { if (active) setError(problem.message || "Actions indisponibles."); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, []);
   return (
     <section className="pont-view">
-      <PriorityBoard projects={projects} />
+      <PriorityBoard projects={projects} actions={actions} loading={loading} error={error} onOpenProject={onOpenProject} />
       <SeaMap projects={projects} onOpenProject={onOpenProject} />
     </section>
   );

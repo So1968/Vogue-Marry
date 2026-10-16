@@ -252,10 +252,11 @@ test("les manœuvres validées peuvent changer de statut avec historique", () =>
 
 test("ouvrir une île affiche son Log Pose sans mélanger les projets", () => {
   const app = read("src/App.jsx");
+  const pont = read("src/features/pont/PontView.jsx");
   assert.match(app, /<LogPoseView key=\{project\.slug\} projectSlug=\{project\.slug\}/u);
   assert.match(app, /className="project-island-home"/u);
-  assert.match(app, /<PriorityBoard projects=\{projects\}/u);
-  assert.match(app, /Actions en retard, validations attendues/u);
+  assert.match(pont, /<PriorityBoard projects=\{projects\}/u);
+  assert.match(pont, /Actions en retard, validations attendues/u);
   const logPose = read("src/features/log-pose/LogPoseView.jsx");
   assert.match(logPose, /Log Pose de l’île/u);
   assert.match(logPose, /Log Pose du Pont/u);
@@ -267,20 +268,22 @@ test("ouvrir une île affiche son Log Pose sans mélanger les projets", () => {
 
 test("le Pont limite le classement visible sans retirer les îles de la carte", () => {
   const app = read("src/App.jsx");
-  assert.match(app, /priorities\.slice\(0, 3\)/u);
-  assert.match(app, /pont-island-directory/u);
-  assert.match(app, /<SeaMap projects=\{projects\} onOpenProject=\{onOpenProject\}/u);
+  const pont = read("src/features/pont/PontView.jsx");
+  assert.match(pont, /priorities\.slice\(0, 3\)/u);
+  assert.match(pont, /pont-island-directory/u);
+  assert.match(pont, /<SeaMap projects=\{projects\} onOpenProject=\{onOpenProject\}/u);
 });
 
 test("le Pont conserve toutes les îles et leurs alertes hors top trois", () => {
   const app = read("src/App.jsx");
-  assert.match(app, /priorities\.slice\(0, 3\)/u);
-  assert.match(app, /alerts = priorities\.filter/u);
+  const pont = read("src/features/pont/PontView.jsx");
+  assert.match(pont, /priorities\.slice\(0, 3\)/u);
+  assert.match(pont, /alerts = priorities\.filter/u);
   assert.match(app, /alerts\.map\(\(project\) =>/u);
   assert.match(app, /onClick=\{\(\) => onOpenProject\(project\)\}/u);
-  assert.match(app, /displayed = priorities\.filter/u);
-  assert.match(app, /pont-island-directory/u);
-  assert.match(app, /Voir les \$\{priorities\.length\} îles/u);
+  assert.match(pont, /displayed = priorities\.filter/u);
+  assert.match(pont, /pont-island-directory/u);
+  assert.match(pont, /Voir les \$\{priorities\.length\} îles/u);
 });
 
 test("une île affiche les actions de son projet et non les réunions ouvertes", () => {

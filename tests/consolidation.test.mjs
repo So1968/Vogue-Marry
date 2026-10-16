@@ -185,7 +185,7 @@ test("le Log Pose persiste et reprend les validations", () => {
   assert.match(memoryApi, /app\.get\("\/api\/log-pose"/u);
   assert.match(memoryApi, /app\.post\("\/api\/log-pose\/save"/u);
   assert.match(memoryApi, /syncLogPose\(safeProjectSlug\)/u);
-  assert.match(memoryApi, /log_pose\.json/u);
+  assert.match(read("backend/lib/log-pose-writer.js"), /log_pose\.json/u);
   assert.match(localApi, /loadLogPose/u);
   assert.match(localApi, /saveLogPose/u);
   assert.match(logPoseView, /lastDecision/u);

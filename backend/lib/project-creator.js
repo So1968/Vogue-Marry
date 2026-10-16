@@ -5,7 +5,7 @@ export function makeProjectCreator({ projectsRoot, slugify, safePathInside, ensu
   const slug = slugify(projectName);
   if (!slug) throw new Error("Nom de projet invalide.");
 
-  const baseDir = safePathInside(PROJECTS_ROOT, slug);
+  const baseDir = safePathInside(projectsRoot, slug);
   ensureDir(baseDir);
   writeFileIfMissing(
     path.join(baseDir, "projet.json"),

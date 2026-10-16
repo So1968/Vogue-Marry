@@ -222,6 +222,19 @@ test("un problème de mémoire locale reste visible et permet un nouvel essai", 
  assert.ok(app.includes("browserStorage()"));
 });
 
+test("la navigation générale est isolée sans perdre ses dix destinations", () => {
+  const app = read("src/App.jsx");
+  const navigation = read("src/features/navigation/NavigationShell.jsx");
+  assert.match(app, /import \{ Sidebar, StageHeader \}/u);
+  assert.match(app, /<Sidebar/u);
+  assert.match(app, /<StageHeader/u);
+  assert.match(navigation, /export function Sidebar/u);
+  assert.match(navigation, /export function StageHeader/u);
+  for (const id of ["pont", "iles", "vigie", "escales", "journal", "besoins", "coffre", "longuevue", "manoeuvres", "caps"]) {
+    assert.ok(navigation.includes(`id: "${id}"`), `Menu absent : ${id}`);
+  }
+});
+
 test("reprise, Vigie, Longue-vue et manœuvres ciblées", () => {
   const app = read("src/App.jsx");
   const search = read("src/features/search/SearchView.jsx");

@@ -5,6 +5,7 @@ import http from "http";
 import path from "path";
 import os from "os";
 import multer from "multer";
+import { safeSegment, safePathInside } from "./lib/path-guards.js";
 
 const app = express();
 const PORT = 8010;
@@ -141,20 +142,6 @@ function writeFileIfMissing(filePath, content) {
   if (!fs.existsSync(filePath)) {
     fs.writeFileSync(filePath, content, "utf8");
   }
-}
-
-function safeSegment(value) {
-  const segment = String(value || "").trim();
-  if (!segment || segment === "." || segment === ".." || segment.includes("..")) return "";
-  if (segment.includes("/") || segment.includes("\\") || segment.includes("\0")) return "";
-  return segment;
-}
-
-function safePathInside(root, ...segments) {
-  const resolved = path.resolve(root, ...segments);
-  const normalizedRoot = path.resolve(root) + path.sep;
-  if (!resolved.startsWith(normalizedRoot)) throw new Error("Chemin de données invalide.");
-  return resolved;
 }
 
 function safeExistingFileInside(root, filePath) {

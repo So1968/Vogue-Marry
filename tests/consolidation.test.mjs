@@ -218,8 +218,8 @@ test("un problème de mémoire locale reste visible et permet un nouvel essai", 
  const app = read("src/App.jsx");
  assert.match(app, /Mémoire locale indisponible/u);
  assert.match(app, /Réessayer la connexion/u);
- assert.match(app, /onClick=\\{refreshData\\}/u);
- assert.match(app, /browserStorage\\(\\)/u);
+ assert.ok(app.includes("onClick={refreshData}"));
+ assert.ok(app.includes("browserStorage()"));
 });
 
 test("reprise, Vigie, Longue-vue et manœuvres ciblées", () => {

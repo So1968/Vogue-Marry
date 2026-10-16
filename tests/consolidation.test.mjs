@@ -264,16 +264,16 @@ test("les manœuvres validées peuvent changer de statut avec historique", () =>
 });
 
 test("ouvrir une île affiche son Log Pose sans mélanger les projets", () => {
-  const app = read("src/App.jsx");
+  const island = read("src/features/projects/IslandProjectView.jsx");
   const pont = read("src/features/pont/PontView.jsx");
-  assert.match(app, /<LogPoseView key=\{project\.slug\} projectSlug=\{project\.slug\}/u);
-  assert.match(app, /className="project-island-home"/u);
+  assert.match(island, /<LogPoseView key=\{project\.slug\} projectSlug=\{project\.slug\}/u);
+  assert.match(island, /className="project-island-home"/u);
   assert.match(pont, /<PriorityBoard projects=\{projects\}/u);
   assert.match(pont, /Actions en retard, validations attendues/u);
   const logPose = read("src/features/log-pose/LogPoseView.jsx");
   assert.match(logPose, /Log Pose de l’île/u);
   assert.match(logPose, /Log Pose du Pont/u);
-  assert.match(app, /onNavigate=\{setSection\}/u);
+  assert.match(island, /onNavigate=\{setSection\}/u);
   assert.match(logPose, /onNavigate\("manoeuvres"\)/u);
   assert.match(logPose, /onNavigate\("journal"\)/u);
   assert.match(logPose, /onNavigate\("cap"\)/u);
@@ -299,11 +299,12 @@ test("le Pont conserve toutes les îles et leurs alertes hors top trois", () => 
 
 test("une île affiche les actions de son projet et non les réunions ouvertes", () => {
   const app = read("src/App.jsx");
-  assert.match(app, /loadKnowledge\("action", project\.slug\)/u);
-  assert.match(app, /projectActions\.map\(\(action\) =>/u);
-  assert.match(app, /action\.reviewStatus === "à valider"/u);
+  const island = read("src/features/projects/IslandProjectView.jsx");
+  assert.match(island, /loadKnowledge\("action", project\.slug\)/u);
+  assert.match(island, /projectActions\.map\(\(action\) =>/u);
+  assert.match(island, /action\.reviewStatus === "à valider"/u);
   assert.match(app, /<IslandProjectView key=\{selectedProject\.slug\}/u);
-  assert.doesNotMatch(app, /openMeetings\.map\(\(meeting\) => \[meeting\.title, meeting\.status\]\)/u);
+  assert.doesNotMatch(island, /openMeetings\.map\(\(meeting\) => \[meeting\.title, meeting\.status\]\)/u);
 });
 
 test("le nombre de participants ne force pas le nombre de voix Pyannote", () => {

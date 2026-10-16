@@ -8,6 +8,7 @@ import multer from "multer";
 import { safeSegment, safePathInside } from "./lib/path-guards.js";
 import { createProjectReader } from "./lib/project-reader.js";
 import { makeProjectCreator } from "./lib/project-creator.js";
+import { normalizeLogPoseManual } from "./lib/log-pose-normalization.js";
 
 const app = express();
 const PORT = 8010;
@@ -613,25 +614,6 @@ const LOG_POSE_DEFAULTS = {
   documentsToFind: [],
   nextDirection: ""
 };
-
-function normalizeLogPoseList(value) {
-  if (Array.isArray(value)) {
-    return value.map((item) => String(item || "").trim()).filter(Boolean);
-  }
-  return String(value || "")
-    .split(/[\r\n;]+/u)
-    .map((item) => item.replace(/^[-*]\s+/u, "").trim())
-    .filter(Boolean);
-}
-
-function normalizeLogPoseManual(value = {}) {
-  return {
-    whatToRemember: String(value.whatToRemember || "").trim(),
-    openQuestions: normalizeLogPoseList(value.openQuestions),
-    documentsToFind: normalizeLogPoseList(value.documentsToFind),
-    nextDirection: String(value.nextDirection || "").trim()
-  };
-}
 
 function readLogPoseManual(projectSlug) {
   const directory = safePathInside(PROJECTS_ROOT, projectSlug, "10_log_pose");

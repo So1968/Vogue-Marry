@@ -21,3 +21,7 @@ export function saveLastPosition(storage, slug, section) {
     return false;
   }
 }
+
+export function browserStorage(browser = typeof window === "undefined" ? null : window) {
+  try { return browser?.localStorage || null; } catch { return null; }
+}

@@ -21,7 +21,7 @@ import KnowledgeView from "./features/knowledge/KnowledgeView.jsx";
 import LogPoseView from "./features/log-pose/LogPoseView.jsx";
 import ProjectsView from "./features/projects/ProjectsView.jsx";
 import { makeProjectViewModel } from "./features/projects/project-utils.js";
-import { readLastPosition, saveLastPosition } from "./features/projects/last-position.js";
+import { browserStorage, readLastPosition, saveLastPosition } from "./features/projects/last-position.js";
 import SearchView from "./features/search/SearchView.jsx";
 
 const MENU = [
@@ -216,7 +216,7 @@ button { font: inherit; }
 .treasure-dropzone strong { font-size: .93rem; }
 .treasure-dropzone span { color: #705438; }
 .treasure-dropzone.is-dragging { border-color: #1b718a; background: #fcebb1; box-shadow: 0 0 0 3px rgba(27,113,138,.3); }
-.resume-banner { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 16px; background: #f1daaa; border-bottom: 1px solid #b88d51; font: .8rem Arial,sans-serif; }\n.resume-banner button, .vigie-list button { padding: 7px 10px; background: #214c5f; color: #fff1c9; border: 1px solid #a77e3c; border-radius: 5px; cursor: pointer; }\n.vigie-list { display: grid; gap: 10px; }\n.knowledge-status-change { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 9px; margin-top: 8px; }
+.memory-error { margin: 12px; padding: 14px 16px; border: 1px solid #a34b36; border-radius: 8px; color: #53281f; background: #fff1e1; font: .88rem Arial,sans-serif; }\n.memory-error p { margin: 7px 0 11px; overflow-wrap: anywhere; }\n.memory-error button { padding: 7px 12px; border: 1px solid #9d6442; border-radius: 5px; background: #f8d8ae; cursor: pointer; }\n.resume-banner { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 9px 16px; background: #f1daaa; border-bottom: 1px solid #b88d51; font: .8rem Arial,sans-serif; }\n.resume-banner button, .vigie-list button { padding: 7px 10px; background: #214c5f; color: #fff1c9; border: 1px solid #a77e3c; border-radius: 5px; cursor: pointer; }\n.vigie-list { display: grid; gap: 10px; }\n.knowledge-status-change { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 9px; margin-top: 8px; }
 .knowledge-status-change label { display: grid; gap: 4px; }
 .knowledge-status-change select, .knowledge-status-change button { padding: 7px; border: 1px solid #9c7c49; border-radius: 6px; background: #f4e3bc; cursor: pointer; }
 .knowledge-status-change button:disabled { cursor: default; opacity: .55; }
@@ -879,7 +879,7 @@ function GenericView({ active, meetings, projects, loading, error, onSaved }) {
 export default function App() {
   const [active, setActive] = useState("pont");
   const [selectedProject, setSelectedProject] = useState(null);
-  const [lastPosition, setLastPosition] = useState(() => readLastPosition(window.localStorage));
+  const [lastPosition, setLastPosition] = useState(() => readLastPosition(browserStorage()));
   const [knowledgeProject, setKnowledgeProject] = useState("");
   const [projects, setProjects] = useState([]);
   const [meetings, setMeetings] = useState([]);
@@ -914,7 +914,7 @@ export default function App() {
   );
 
   const onPositionChange = useCallback((slug, section) => {
-    saveLastPosition(window.localStorage, slug, section);
+    saveLastPosition(browserStorage(), slug, section);
     setLastPosition({ slug, section });
   }, []);
 
@@ -954,7 +954,7 @@ export default function App() {
         />
         <section className="main-stage">
           <StageHeader active={active} project={selectedProject} />
-          <div className="stage-content">{!selectedProject && active === "pont" && lastPosition && projectViewModels.some((p) => p.slug === lastPosition.slug) ? <div className="resume-banner"><span>Dernière escale : {projectViewModels.find((p) => p.slug === lastPosition.slug)?.name}</span><button type="button" onClick={() => openProject(projectViewModels.find((p) => p.slug === lastPosition.slug))}>Reprendre où j’en étais →</button></div> : null}{centralView}</div>
+          <div className="stage-content">{dataError ? <div className="memory-error" role="alert"><strong>Mémoire locale indisponible</strong><p>{dataError}</p><button type="button" onClick={refreshData} disabled={loadingData}>{loadingData ? "Nouvel essai…" : "Réessayer la connexion"}</button></div> : null}{!selectedProject && active === "pont" && lastPosition && projectViewModels.some((p) => p.slug === lastPosition.slug) ? <div className="resume-banner"><span>Dernière escale : {projectViewModels.find((p) => p.slug === lastPosition.slug)?.name}</span><button type="button" onClick={() => openProject(projectViewModels.find((p) => p.slug === lastPosition.slug))}>Reprendre où j’en étais →</button></div> : null}{centralView}</div>
         </section>
         {showShipLog ? <LogPoseView onOpen={() => setActive("manoeuvres")} /> : null}
       </main>

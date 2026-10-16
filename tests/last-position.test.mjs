@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { RESUME_KEY, readLastPosition, saveLastPosition } from "../src/features/projects/last-position.js";
+import { RESUME_KEY, browserStorage, readLastPosition, saveLastPosition } from "../src/features/projects/last-position.js";
 
 function memoryStorage() {
   const values = new Map();
@@ -37,4 +37,11 @@ test("reste utilisable quand le stockage local est bloqué", () => {
   const storage = { getItem() { throw new Error("bloqué"); }, setItem() { throw new Error("bloqué"); } };
   assert.equal(readLastPosition(storage), null);
   assert.equal(saveLastPosition(storage, "ile_test", "carte"), false);
+});
+
+test("ouverture possible lorsque l'accès à localStorage lève une exception", () => {
+  const blocked = Object.defineProperty({}, "localStorage", { get() { throw new Error("accès refusé"); } });
+  assert.equal(browserStorage(blocked), null);
+  assert.equal(readLastPosition(browserStorage(blocked)), null);
+  assert.equal(saveLastPosition(browserStorage(blocked), "ile_test", "carte"), false);
 });

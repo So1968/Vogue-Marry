@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { loadInbox, loadKnowledge, loadProjects } from "./lib/local-api.js";
+import { loadInbox, loadProjects } from "./lib/local-api.js";
 import MeetingsView from "./features/meetings/MeetingsView.jsx";
 import DocumentsView from "./features/documents/DocumentsView.jsx";
 import KnowledgeView from "./features/knowledge/KnowledgeView.jsx";

@@ -6,6 +6,7 @@ import path from "path";
 import os from "os";
 import multer from "multer";
 import { safeSegment, safePathInside } from "./lib/path-guards.js";
+import { createProjectReader } from "./lib/project-reader.js";
 
 const app = express();
 const PORT = 8010;
@@ -361,16 +362,7 @@ Structure :
   return readProjectRecord(slug);
 }
 
-function readProjectRecord(projectSlug) {
-  const projectDir = safePathInside(PROJECTS_ROOT, projectSlug);
-  const metadata = readJsonIfExists(path.join(projectDir, "projet.json"));
-  return {
-    slug: projectSlug,
-    name: metadata?.name || projectSlug.replaceAll("_", " "),
-    description: metadata?.description || "",
-    createdAt: metadata?.createdAt || null
-  };
-}
+const readProjectRecord = createProjectReader({ projectsRoot: PROJECTS_ROOT, safePathInside, readJsonIfExists });
 
 function readJsonIfExists(filePath) {
   try {

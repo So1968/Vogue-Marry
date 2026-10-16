@@ -267,7 +267,6 @@ test("ouvrir une île affiche son Log Pose sans mélanger les projets", () => {
 });
 
 test("le Pont limite le classement visible sans retirer les îles de la carte", () => {
-  const app = read("src/App.jsx");
   const pont = read("src/features/pont/PontView.jsx");
   assert.match(pont, /priorities\.slice\(0, 3\)/u);
   assert.match(pont, /pont-island-directory/u);
@@ -275,12 +274,11 @@ test("le Pont limite le classement visible sans retirer les îles de la carte", 
 });
 
 test("le Pont conserve toutes les îles et leurs alertes hors top trois", () => {
-  const app = read("src/App.jsx");
   const pont = read("src/features/pont/PontView.jsx");
   assert.match(pont, /priorities\.slice\(0, 3\)/u);
   assert.match(pont, /alerts = priorities\.filter/u);
-  assert.match(app, /alerts\.map\(\(project\) =>/u);
-  assert.match(app, /onClick=\{\(\) => onOpenProject\(project\)\}/u);
+  assert.match(pont, /alerts\.map\(\(project\) =>/u);
+  assert.match(pont, /onClick=\{\(\) => onOpenProject\(project\)\}/u);
   assert.match(pont, /displayed = priorities\.filter/u);
   assert.match(pont, /pont-island-directory/u);
   assert.match(pont, /Voir les \$\{priorities\.length\} îles/u);

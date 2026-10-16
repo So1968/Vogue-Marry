@@ -230,7 +230,8 @@ test("reprise, Vigie, Longue-vue et manœuvres ciblées", () => {
   assert.match(app, /readLastPosition/u);
   assert.match(app, /saveLastPosition/u);
   assert.match(app, /Reprendre où j’en étais/u);
-  assert.match(app, /function VigieView/u);
+  assert.match(read("src/features/vigie/VigieView.jsx"), /function VigieView/u);
+  assert.match(app, /import VigieView/u);
   assert.match(app, /active === "vigie"/u);
   assert.match(search, /Toutes les îles/u);
   assert.match(search, /onOpenProject/u);

@@ -218,6 +218,23 @@ test("contrat Réunion : export, audio, journal, validation et protection des é
       projectName: "Île de contrat fictive", meetingDirName: resumedName, count: 3
     })).data.status, "already-finalized");
 
+    const marker = { id: "repere-1", type: "decision", timeSeconds: 12, label: "Décision" };
+    const markerSaved = await json("/api/meetings/save-markers", {
+      projectSlug, meetingDirName, markers: [marker]
+    });
+    assert.equal(markerSaved.status, 200);
+    const markerRepeated = await json("/api/meetings/save-markers", {
+      projectSlug, meetingDirName, markers: [marker]
+    });
+    assert.equal(markerRepeated.data.count, 1, "Réessayer ne doit pas dupliquer un marqueur.");
+    const persisted = JSON.parse(fs.readFileSync(path.join(meetingPath, "donnees_escale.json"), "utf8"));
+    assert.equal(persisted.markers[0].id, "repere-1");
+    assert.equal(persisted.rawNotes, "Marqueur fictif à 00:03", "Les notes originales doivent rester intactes.");
+    const invalidMarker = await json("/api/meetings/save-markers", {
+      projectSlug, meetingDirName, markers: [{ id: "bad", timeSeconds: -4, type: "action" }]
+    });
+    assert.equal(invalidMarker.status, 400);
+
     const initial = await json("/api/meetings/read-report", { projectSlug, meetingDirName });
     assert.equal(initial.status, 200);
     assert.equal(initial.data.reportType, "exporte");

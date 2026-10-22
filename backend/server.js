@@ -1017,6 +1017,43 @@ app.post("/api/meetings/export-audio", upload.single("audio"), (req, res) => {
 });
 
 // Blocs audio persistés sur disque. Le lecteur existant reste inchangé.
+// Sauvegarde des marqueurs pendant la réunion, sans attendre l'arrêt audio.
+app.post("/api/meetings/save-markers", (req, res) => {
+  try {
+    const projectSlug = safeSegment(req.body.projectSlug);
+    const meetingDirName = safeSegment(req.body.meetingDirName);
+    if (!projectSlug || !meetingDirName) throw new Error("Escale invalide.");
+    const markers = req.body.markers;
+    if (!Array.isArray(markers) || markers.length > 10000) throw new Error("Marqueurs invalides.");
+    for (const marker of markers) {
+      if (!marker || typeof marker !== "object" ||
+          typeof marker.id !== "string" || marker.id.length > 120 ||
+          typeof marker.type !== "string" || marker.type.length > 100 ||
+          !Number.isFinite(marker.timeSeconds) || marker.timeSeconds < 0) {
+        throw new Error("Marqueur malformé.");
+      }
+    }
+    const meetingDir = findMeetingDir(projectSlug, meetingDirName);
+    const dataPath = path.join(meetingDir, "donnees_escale.json");
+    if (!fs.existsSync(dataPath)) throw new Error("Escale introuvable.");
+    const current = JSON.parse(fs.readFileSync(dataPath, "utf8"));
+    const existing = Array.isArray(current.markers) ? current.markers : [];
+    const byId = new Map(existing.map((item) => [item.id, item]));
+    for (const marker of markers) byId.set(marker.id, marker);
+    const merged = [...byId.values()].sort((a, b) => a.timeSeconds - b.timeSeconds);
+    const temp = path.join(meetingDir, `markers_${process.pid}_${Date.now()}.tmp`);
+    try {
+      fs.writeFileSync(temp, JSON.stringify({ ...current, markers: merged }, null, 2), { flag: "wx" });
+      fs.renameSync(temp, dataPath);
+    } finally {
+      if (fs.existsSync(temp)) fs.unlinkSync(temp);
+    }
+    return res.json({ status: "ok", count: merged.length });
+  } catch (error) {
+    return res.status(400).json({ error: error.message || "Impossible de sauvegarder les marqueurs." });
+  }
+});
+
 app.post("/api/meetings/audio-chunk", upload.single("audio"), (req, res) => {
   try {
     const projectSlug = slugify(req.body.projectName);

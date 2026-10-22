@@ -134,3 +134,38 @@ export function validateMeeting({ projectSlug, meetingDirName }) {
     body: JSON.stringify({ projectSlug, meetingDirName })
   });
 }
+
+/**
+ * API de blocs audio, volontairement distincte du flux historique.
+ * L'enregistrement navigateur ne basculera sur ce protocole qu'après
+ * validation de sa file locale persistante et de la reprise.
+ */
+export function uploadMeetingAudioChunk({ projectName, meetingDirName, index, blob }) {
+  const form = new FormData();
+  form.append("projectName", projectName);
+  form.append("meetingDirName", meetingDirName);
+  form.append("index", String(index));
+  form.append("audio", blob, `chunk-${index}.webm`);
+  return localApi("/api/meetings/audio-chunk", { method: "POST", body: form });
+}
+
+export function getMeetingAudioChunksStatus({ projectName, meetingDirName }) {
+  return localApi("/api/meetings/audio-chunks-status", {
+    method: "POST",
+    body: JSON.stringify({ projectName, meetingDirName })
+  });
+}
+
+export function finalizeMeetingAudioChunks({ projectName, meetingDirName, count }) {
+  return localApi("/api/meetings/audio-chunks-finalize", {
+    method: "POST",
+    body: JSON.stringify({ projectName, meetingDirName, count })
+  });
+}
+
+export function saveMeetingMarkers({ projectSlug, meetingDirName, markers }) {
+  return localApi("/api/meetings/save-markers", {
+    method: "POST",
+    body: JSON.stringify({ projectSlug, meetingDirName, markers })
+  });
+}

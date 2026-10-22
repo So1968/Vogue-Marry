@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import MeetingMode from "../../components/MeetingMode.jsx";
-import { exportMeeting, exportMeetingAudio } from "../../lib/local-api.js";
+import { exportMeeting, saveMeetingMarkers } from "../../lib/local-api.js";
+import { keepAudioChunk, rememberAudioSession, recoverAudioSession } from "../../lib/audio-chunk-queue.js";
+import { syncAudioSession } from "../../lib/audio-chunk-sync.js";
+import { keepLocalMarkers, recoverLocalMarkers, clearLocalMarkers } from "../../lib/meeting-marker-backup.js";
 
 function parseParticipants(value) {
   return String(value || "")
@@ -23,9 +26,25 @@ export default function MeetingModePanel({ projects, onSaved }) {
   const [error, setError] = useState("");
   const recorderRef = useRef(null);
   const streamRef = useRef(null);
-  const chunksRef = useRef([]);
+  const writesRef = useRef(Promise.resolve());
+  const chunkWriteErrorRef = useRef(null);
+  const markerWritesRef = useRef(Promise.resolve());
+  const markerErrorRef = useRef(null);
+  const activeSessionRef = useRef(null);
+  const [recoverableSession, setRecoverableSession] = useState(() => recoverAudioSession());
   const markersRef = useRef([]);
   const mountedRef = useRef(true);
+
+  useEffect(() => {
+    if (!recoverableSession?.sessionId) return;
+    try {
+      const restored = recoverLocalMarkers(recoverableSession.sessionId);
+      markersRef.current = restored;
+      setMarkers(restored);
+    } catch (restoreError) {
+      setError("Marqueurs locaux à examiner : " + restoreError.message);
+    }
+  }, [recoverableSession?.sessionId]);
 
   useEffect(() => {
     if (!projectSlug && projects[0]?.slug) setProjectSlug(projects[0].slug);
@@ -50,6 +69,10 @@ export default function MeetingModePanel({ projects, onSaved }) {
       setError("Donnez un titre à cette escale avant de démarrer.");
       return;
     }
+    if (recoverableSession) {
+      setError("Une réunion précédente reste à récupérer. Terminez d'abord sa sauvegarde.");
+      return;
+    }
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       setError("L’enregistrement audio n’est pas disponible dans ce navigateur.");
       return;
@@ -63,33 +86,70 @@ export default function MeetingModePanel({ projects, onSaved }) {
       }
       streamRef.current = stream;
       const recorder = new MediaRecorder(stream);
-      chunksRef.current = [];
+      const meeting = await exportMeeting({
+        projectName: selectedProject.name,
+        meetingDate: new Date().toISOString().slice(0, 10),
+        meetingType,
+        title: title.trim(),
+        participants: parseParticipants(participants),
+        context: context.trim(),
+        rawNotes: JSON.stringify(markersRef.current)
+      });
+      const session = {
+        sessionId: crypto.randomUUID(), projectName: selectedProject.name,
+        projectSlug: meeting.projectSlug,
+        meetingDirName: meeting.meetingDirName, count: 0, finalizedCapture: false
+      };
+      rememberAudioSession(session);
+      activeSessionRef.current = session;
+      markerWritesRef.current = Promise.resolve();
+      markerErrorRef.current = null;
+      setRecoverableSession(session);
+      writesRef.current = Promise.resolve();
+      chunkWriteErrorRef.current = null;
       recorderRef.current = recorder;
       recorder.ondataavailable = (event) => {
-        if (event.data.size) chunksRef.current.push(event.data);
+        if (!event.data.size) return;
+        const index = session.count;
+        session.count += 1;
+        rememberAudioSession(session);
+        writesRef.current = writesRef.current
+          .then(async () => {
+            if (chunkWriteErrorRef.current) return;
+            await keepAudioChunk(session.sessionId, index, event.data);
+          })
+          .catch((writeError) => {
+            chunkWriteErrorRef.current = writeError;
+            if (mountedRef.current) {
+              setError("Stockage audio local interrompu : " + writeError.message + ". Conservez les données du navigateur.");
+            }
+            // Ne pas continuer à enregistrer si le stockage local est défaillant.
+            if (recorder.state === "recording") recorder.stop();
+          });
       };
       recorder.onstop = async () => {
-        const audioBlob = new Blob(chunksRef.current, { type: recorder.mimeType || "audio/webm" });
+        if (mountedRef.current) {
+          setIsRecording(false);
+          setSaving(true);
+        }
         stream.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
         recorderRef.current = null;
-        if (!mountedRef.current) return;
         try {
-          const meeting = await exportMeeting({
-            projectName: selectedProject.name,
-            meetingDate: new Date().toISOString().slice(0, 10),
-            meetingType,
-            title: title.trim(),
-            participants: parseParticipants(participants),
-            context: context.trim(),
-            rawNotes: JSON.stringify(markersRef.current)
-          });
-          await exportMeetingAudio({
-            projectName: selectedProject.name,
-            meetingDirName: meeting.meetingDirName,
-            blob: audioBlob
-          });
-          setNotice("Escale, marqueurs et audio enregistrés dans la mémoire locale.");
+          await writesRef.current;
+          if (chunkWriteErrorRef.current) throw chunkWriteErrorRef.current;
+          // L'audio est récupérable dès que le dernier bloc est stocké localement.
+          // Une panne du serveur de marqueurs ne doit pas le laisser « incomplet ».
+          session.finalizedCapture = true;
+          rememberAudioSession(session);
+          await markerWritesRef.current;
+          await savePendingMarkers(session);
+          await syncAudioSession(session);
+          if (!mountedRef.current) return;
+          clearLocalMarkers(session.sessionId);
+          setRecoverableSession(null);
+          activeSessionRef.current = null;
+          setNotice("Audio finalisé et sauvegardé. Vérifiez la lecture avant toute utilisation importante.");
           setMarkers([]);
           markersRef.current = [];
           setTitle("");
@@ -98,17 +158,63 @@ export default function MeetingModePanel({ projects, onSaved }) {
           setContext("");
           onSaved?.();
         } catch (saveError) {
-          setError(saveError.message || "Impossible d’enregistrer l’escale.");
+          if (mountedRef.current) setError("Audio à récupérer : " + (saveError.message || "sauvegarde incomplète"));
         } finally {
-          setSaving(false);
+          if (mountedRef.current) setSaving(false);
         }
       };
-      recorder.start();
+      recorder.start(5000);
       setIsRecording(true);
     } catch (recordingError) {
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
       setError(recordingError.message || "Le microphone n’a pas pu être activé.");
+    }
+  }
+
+  async function savePendingMarkers(session) {
+    const pending = recoverLocalMarkers(session.sessionId);
+    if (!pending.length) return;
+    await saveMeetingMarkers({ projectSlug: session.projectSlug, meetingDirName: session.meetingDirName, markers: pending });
+    markerErrorRef.current = null;
+  }
+
+  async function retryMarkerSave() {
+    if (!recoverableSession || saving || isRecording) return;
+    setSaving(true);
+    setError("");
+    try {
+      await savePendingMarkers(recoverableSession);
+      clearLocalMarkers(recoverableSession.sessionId);
+      setNotice("Marqueurs confirmés sur le serveur. L'audio reste à récupérer séparément.");
+    } catch (saveError) {
+      setError("Marqueurs non confirmés : " + (saveError.message || "échec réseau"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function retryAudioSave() {
+    if (!recoverableSession || saving || isRecording) return;
+    if (!recoverableSession.finalizedCapture) {
+      setError("L’enregistrement a été interrompu avant la fin. Les fragments disponibles sont conservés. La récupération partielle nécessite une validation spécifique.");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      await savePendingMarkers(recoverableSession);
+      const result = await syncAudioSession(recoverableSession);
+      if (["ok", "already-finalized"].includes(result.status)) {
+        clearLocalMarkers(recoverableSession.sessionId);
+        setRecoverableSession(null);
+        setNotice("Blocs audio récupérés et finalisés. Vérifiez l'écoute.");
+        onSaved?.();
+      }
+    } catch (saveError) {
+      setError("La récupération reste nécessaire : " + (saveError.message || "échec de transfert"));
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -122,6 +228,29 @@ export default function MeetingModePanel({ projects, onSaved }) {
   function addMarker(marker) {
     markersRef.current = [...markersRef.current, marker];
     setMarkers(markersRef.current);
+    const session = activeSessionRef.current;
+    if (!session) return;
+    const snapshot = [...markersRef.current];
+    try {
+      keepLocalMarkers(session.sessionId, snapshot);
+    } catch (backupError) {
+      markerErrorRef.current = backupError;
+      setError("Impossible de conserver le marqueur localement : " + backupError.message);
+      return;
+    }
+    markerWritesRef.current = markerWritesRef.current
+      .then(() => saveMeetingMarkers({
+        projectSlug: session.projectSlug,
+        meetingDirName: session.meetingDirName,
+        markers: snapshot
+      }))
+      .then(() => { markerErrorRef.current = null; })
+      .catch((saveError) => {
+        markerErrorRef.current = saveError;
+        if (mountedRef.current) {
+          setError("Marqueur non confirmé sur disque : " + (saveError.message || "erreur réseau"));
+        }
+      });
   }
 
   return (
@@ -164,6 +293,13 @@ export default function MeetingModePanel({ projects, onSaved }) {
           </label>
         </div>
       </div>
+      {recoverableSession && !isRecording ? (
+        <div className="meeting-notice">
+          Une sauvegarde audio est en attente. Ne videz pas les données du navigateur.
+          <button type="button" disabled={saving} onClick={retryMarkerSave}>Sauvegarder les marqueurs</button>
+          <button type="button" disabled={saving} onClick={retryAudioSave}>Reprendre la sauvegarde audio</button>
+        </div>
+      ) : null}
       {notice ? <p className="meeting-notice">{notice}</p> : null}
       {error ? <p className="data-state error">{error}</p> : null}
       <MeetingMode

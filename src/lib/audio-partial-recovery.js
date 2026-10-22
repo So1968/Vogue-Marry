@@ -14,6 +14,6 @@ export function preparePartialAudioExport(chunks) {
   if (sorted.some((chunk) => chunk.blob.type !== sorted[0].blob.type)) {
     throw new Error("Formats de fragments différents : export combiné refusé.");
   }
-  const extension = /audio\\/ogg/i.test(type) ? "ogg" : /audio\\/webm/i.test(type) ? "webm" : "bin";
+  const extension = type.startsWith("audio/ogg") ? "ogg" : type.startsWith("audio/webm") ? "webm" : "bin";
   return { blob: new Blob(sorted.map((chunk) => chunk.blob), { type }), extension, count: sorted.length };
 }

@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import MeetingModePanel from "./MeetingModePanel.jsx";
-import { localApi, saveMeetingReport, validateMeeting } from "../../lib/local-api.js";
+import { localApi, meetingAudioUrl, saveMeetingReport, validateMeeting } from "../../lib/local-api.js";
 
 function formatDate(value) {
   if (!value) return "Date à confirmer";
@@ -10,12 +10,25 @@ function formatDate(value) {
 }
 
 function MeetingJournalCard({ meeting, onChanged }) {
+  const audioRef = useRef(null);
   const [report, setReport] = useState(null);
   const [draftReport, setDraftReport] = useState("");
   const [reportType, setReportType] = useState("");
   const [busy, setBusy] = useState(false);
   const [savingReport, setSavingReport] = useState(false);
   const [notice, setNotice] = useState("");
+
+  async function jumpToMarker(timeSeconds) {
+    const player = audioRef.current;
+    if (!player || !Number.isFinite(timeSeconds) || timeSeconds < 0) return;
+    try {
+      player.currentTime = timeSeconds;
+      await player.play();
+      setNotice("");
+    } catch {
+      setNotice("Lecture indisponible pour ce passage. Vérifiez le format de l'audio original.");
+    }
+  }
 
   async function toggleReport() {
     if (report !== null) {
@@ -102,6 +115,33 @@ function MeetingJournalCard({ meeting, onChanged }) {
         {meeting.hasReport ? <span>Journal</span> : null}
         {meeting.hasValidatedReport ? <span>Validé</span> : null}
       </div>
+      {meeting.hasAudio ? (
+        <div className="meeting-playback">
+          <audio
+            ref={audioRef}
+            controls
+            preload="metadata"
+            src={meetingAudioUrl({
+              projectSlug: meeting.projectSlug,
+              meetingDirName: meeting.meetingDirName
+            })}
+            aria-label={`Enregistrement de l'escale ${meeting.title}`}
+          />
+          {Array.isArray(meeting.markers) && meeting.markers.length ? (
+            <div className="meeting-actions" aria-label="Marqueurs audio">
+              {meeting.markers
+                .filter((marker) => Number.isFinite(marker.timeSeconds) && marker.timeSeconds >= 0)
+                .map((marker) => (
+                  <button key={marker.id} type="button" onClick={() => jumpToMarker(marker.timeSeconds)}>
+                    {Math.floor(marker.timeSeconds / 60).toString().padStart(2, "0")}:
+                    {Math.floor(marker.timeSeconds % 60).toString().padStart(2, "0")}
+                    {" · "}{marker.type}
+                  </button>
+                ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       {meeting.hasReport ? (
         <div className="meeting-actions">
           <button type="button" onClick={toggleReport} disabled={busy}>

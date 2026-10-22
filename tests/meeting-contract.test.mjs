@@ -150,6 +150,8 @@ test("contrat Réunion : export, audio, journal, validation et protection des é
       projectName: "Île de contrat fictive", meetingDirName: chunkName
     });
     assert.deepEqual(state.data.received, [0, 2]);
+    assert.equal(state.data.extension, ".webm");
+    assert.equal(state.data.mimeType, "audio/webm");
     const missing = await json("/api/meetings/audio-chunks-finalize", {
       projectName: "Île de contrat fictive", meetingDirName: chunkName, count: 3
     });
@@ -217,6 +219,39 @@ test("contrat Réunion : export, audio, journal, validation et protection des é
     assert.equal((await json("/api/meetings/audio-chunks-finalize", {
       projectName: "Île de contrat fictive", meetingDirName: resumedName, count: 3
     })).data.status, "already-finalized");
+
+    // Firefox produit normalement de l'Ogg/Opus par défaut : ne jamais le renommer en WebM.
+    const oggMeeting = await json("/api/meetings/export", {
+      projectName: "Île de contrat fictive", title: "Test audio Ogg",
+      meetingDate: "2026-10-22", meetingType: "réunion", participants: "Intervenant fictif"
+    });
+    assert.equal(oggMeeting.status, 201);
+    const oggName = oggMeeting.data.meetingDirName;
+    async function sendOggChunk(index, body) {
+      const payload = new FormData();
+      payload.append("projectName", "Île de contrat fictive");
+      payload.append("meetingDirName", oggName);
+      payload.append("index", String(index));
+      payload.append("audio", new Blob([body], { type: "audio/ogg" }), "part.ogg");
+      const response = await fetch(API + "/api/meetings/audio-chunk", { method: "POST", body: payload });
+      return { status: response.status, data: await response.json() };
+    }
+    assert.equal((await sendOggChunk(0, "OGG-A")).status, 201);
+    assert.equal((await sendOggChunk(1, "OGG-B")).status, 201);
+    const oggState = await json("/api/meetings/audio-chunks-status", {
+      projectName: "Île de contrat fictive", meetingDirName: oggName
+    });
+    assert.equal(oggState.data.extension, ".ogg");
+    assert.equal(oggState.data.mimeType, "audio/ogg");
+    const oggFinal = await json("/api/meetings/audio-chunks-finalize", {
+      projectName: "Île de contrat fictive", meetingDirName: oggName, count: 2
+    });
+    assert.equal(oggFinal.status, 201);
+    assert.equal(oggFinal.data.audioFileName, "audio_original.ogg");
+    const oggDir = path.join(home, "VOGUE-MERRY-DONNEES", "01_PROJETS",
+      projectSlug, "01_escales_reunions", oggName);
+    assert.equal(fs.readFileSync(path.join(oggDir, "audio_original.ogg"), "utf8"), "OGG-AOGG-B");
+    assert.equal(fs.existsSync(path.join(oggDir, "audio_original.webm")), false);
 
     const marker = { id: "repere-1", type: "decision", timeSeconds: 12, label: "Décision" };
     const markerSaved = await json("/api/meetings/save-markers", {

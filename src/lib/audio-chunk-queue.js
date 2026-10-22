@@ -56,6 +56,23 @@ export async function keepAudioChunk(sessionId, index, blob) {
   }
 }
 
+// Lecture ciblée : ne pas conserver les Blob en RAM dans la file réseau.
+export async function getAudioChunk(sessionId, index) {
+  const db = await openAudioDatabase();
+  try {
+    const tx = db.transaction(STORE, "readonly");
+    const request = tx.objectStore(STORE).get(chunkKey(sessionId, index));
+    const result = await new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result || null);
+      request.onerror = () => reject(request.error);
+    });
+    await transactionDone(tx);
+    return result;
+  } finally {
+    db.close();
+  }
+}
+
 export async function pendingAudioChunks(sessionId) {
   if (!sessionId) throw new Error("Réunion manquante.");
   const db = await openAudioDatabase();

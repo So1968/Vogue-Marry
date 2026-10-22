@@ -157,6 +157,35 @@ export default function TranscriptionView() {
     })();
   }, []);
 
+  // Choisir une escale précharge son audio original local, sans transfert cloud.
+  useEffect(() => {
+    if (!selectedMeeting?.audioFileName) {
+      if (meetingId) setFile(null);
+      return undefined;
+    }
+    const controller = new AbortController();
+    setFile(null);
+    (async () => {
+      try {
+        const url = `${API}/api/transcription/escales/${encodeURIComponent(selectedMeeting.projectSlug)}/${encodeURIComponent(selectedMeeting.meetingDirName)}/audio`;
+        const response = await fetch(url, { signal: controller.signal });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload.error || "Audio original introuvable.");
+        }
+        const blob = await response.blob();
+        if (controller.signal.aborted) return;
+        if (!blob.size) throw new Error("L'audio original est vide.");
+        setFile(new File([blob], selectedMeeting.audioFileName, { type: blob.type || "application/octet-stream" }));
+        setError("");
+      } catch (loadError) {
+        if (controller.signal.aborted) return;
+        setError("Impossible de précharger l'audio de l'escale : " + loadError.message);
+      }
+    })();
+    return () => controller.abort();
+  }, [selectedMeeting, meetingId]);
+
   useEffect(() => {
     setAudioDuration(null);
     if (!file) return undefined;
@@ -531,7 +560,7 @@ export default function TranscriptionView() {
         ) : null}
 
         <label className="transcription-file">
-          <span>Enregistrement à transcrire</span>
+          <span>Enregistrement à transcrire {selectedMeeting?.audioFileName ? "(audio de l’escale préchargé automatiquement)" : ""}</span>
           <input
             type="file"
             accept="audio/*,.m4a,.mp3,.wav,.ogg,.webm,.mp4"

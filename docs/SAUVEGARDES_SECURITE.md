@@ -3,6 +3,23 @@
 Les commandes ci-dessous sont **manuelles**. Elles ne modifient pas le dossier
 `~/VOGUE-MERRY-DONNEES` et ne remplacent pas une sauvegarde automatisée.
 
+## Méthode recommandée : archive directement chiffrée
+
+Pour éviter une archive temporaire non chiffrée, privilégier la commande suivante
+après avoir défini la variable d'environnement secrète (voir plus bas) :
+
+```bash
+read -r -s -p "Phrase secrète : " VOGUE_BACKUP_PASSPHRASE; echo
+export VOGUE_BACKUP_PASSPHRASE
+node scripts/backup-encrypted-local-data.mjs
+unset VOGUE_BACKUP_PASSPHRASE
+```
+
+L'archive produite est `.tar.gz.enc`. Aucune copie `.tar.gz` en clair
+n'est créée par cette commande. **Vérifier le déchiffrement** sur un dossier
+distinct avant de considérer la sauvegarde comme acquise. La commande n'est
+pas automatique : il faut la lancer volontairement.
+
 ## Créer une sauvegarde
 
 ```bash

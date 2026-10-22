@@ -50,6 +50,12 @@ export default function MeetingModePanel({ projects, onSaved }) {
     if (!projectSlug && projects[0]?.slug) setProjectSlug(projects[0].slug);
   }, [projectSlug, projects]);
 
+  useEffect(() => {
+    const refreshRecoverableSession = () => setRecoverableSession(recoverAudioSession());
+    window.addEventListener("storage", refreshRecoverableSession);
+    return () => window.removeEventListener("storage", refreshRecoverableSession);
+  }, []);
+
   useEffect(() => () => {
     mountedRef.current = false;
     if (recorderRef.current?.state === "recording") recorderRef.current.stop();
@@ -69,7 +75,9 @@ export default function MeetingModePanel({ projects, onSaved }) {
       setError("Donnez un titre à cette escale avant de démarrer.");
       return;
     }
-    if (recoverableSession) {
+    const liveSession = recoverAudioSession();
+    if (recoverableSession || liveSession?.sessionId) {
+      if (liveSession?.sessionId) setRecoverableSession(liveSession);
       setError("Une réunion précédente reste à récupérer. Terminez d'abord sa sauvegarde.");
       return;
     }
@@ -285,7 +293,7 @@ export default function MeetingModePanel({ projects, onSaved }) {
           </label>
           <label>
             Participants
-            <input value={participants} onChange={(event) => setParticipants(event.target.value)} disabled={isRecording || saving} placeholder="Sofia, Pierre…" />
+            <input value={participants} onChange={(event) => setParticipants(event.target.value)} disabled={isRecording || saving} placeholder="Intervenant 1, Intervenant 2…" />
           </label>
           <label className="meeting-context-field">
             Objectif / contexte de l’escale

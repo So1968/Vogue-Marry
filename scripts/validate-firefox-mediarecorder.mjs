@@ -43,7 +43,6 @@ const browser = await firefox.launch({
 
 try {
   const context = await browser.newContext();
-  await context.grantPermissions(["microphone"], { origin });
   const page = await context.newPage();
   await page.goto(origin);
 

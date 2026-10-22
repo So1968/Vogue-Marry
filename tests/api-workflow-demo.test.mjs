@@ -40,6 +40,19 @@ test("parcours réel API locale sur une île fictive isolée : créer, reprendre
     }
     assert.ok(ready, "Serveur local non disponible : " + output);
 
+    const foreignRead = await fetch(API + "/api/projects", {
+      headers: { Origin: "https://site-externe.example" }
+    });
+    assert.equal(foreignRead.status, 403, "Une page externe ne doit pas lire les projets locaux.");
+    const foreignMetadataRead = await fetch(API + "/api/projects", {
+      headers: { "Sec-Fetch-Site": "cross-site" }
+    });
+    assert.equal(foreignMetadataRead.status, 403, "Une lecture intersites signalée doit être refusée.");
+    const allowedRead = await fetch(API + "/api/projects", {
+      headers: { Origin: "http://127.0.0.1:5173" }
+    });
+    assert.equal(allowedRead.status, 200, "Le frontend local autorisé doit conserver son accès.");
+
     const empty = await call("/api/projects");
     assert.deepEqual(empty.payload.projects, [], "Le test ne doit utiliser aucune donnée existante.");
 

@@ -140,12 +140,22 @@ export function validateMeeting({ projectSlug, meetingDirName }) {
  * L'enregistrement navigateur ne basculera sur ce protocole qu'après
  * validation de sa file locale persistante et de la reprise.
  */
+function audioChunkExtension(blob) {
+  const type = String(blob?.type || "").split(";")[0].trim().toLowerCase();
+  if (type === "audio/ogg" || type === "application/ogg") return ".ogg";
+  if (type === "audio/mp4") return ".m4a";
+  if (type === "video/mp4") return ".mp4";
+  if (type === "audio/mpeg") return ".mp3";
+  if (type === "audio/wav" || type === "audio/x-wav") return ".wav";
+  return ".webm";
+}
+
 export function uploadMeetingAudioChunk({ projectName, meetingDirName, index, blob }) {
   const form = new FormData();
   form.append("projectName", projectName);
   form.append("meetingDirName", meetingDirName);
   form.append("index", String(index));
-  form.append("audio", blob, `chunk-${index}.webm`);
+  form.append("audio", blob, `chunk-${index}${audioChunkExtension(blob)}`);
   return localApi("/api/meetings/audio-chunk", { method: "POST", body: form });
 }
 

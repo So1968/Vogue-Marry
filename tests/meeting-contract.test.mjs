@@ -86,6 +86,15 @@ test("contrat Réunion : export, audio, journal, validation et protection des é
     assert.equal(audioData.audioFileName, "audio_original.webm");
     assert.equal(fs.readFileSync(path.join(meetingPath, "audio_original.webm"), "utf8"), "contenu audio simulé");
 
+    const listen = await fetch(API + "/api/meetings/audio?" + new URLSearchParams({
+      projectSlug, meetingDirName
+    }));
+    assert.equal(listen.status, 200);
+    assert.equal(await listen.text(), "contenu audio simulé");
+    assert.equal(listen.headers.get("cache-control"), "no-store");
+    const forbiddenListen = await fetch(API + "/api/meetings/audio?projectSlug=..&meetingDirName=..");
+    assert.notEqual(forbiddenListen.status, 200, "Un chemin arbitraire ne peut pas être écouté.");
+
     const duplicateForm = new FormData();
     duplicateForm.append("projectName", "Île de contrat fictive");
     duplicateForm.append("meetingDirName", meetingDirName);
@@ -264,6 +273,12 @@ test("contrat Réunion : export, audio, journal, validation et protection des é
     assert.equal(markerRepeated.data.count, 1, "Réessayer ne doit pas dupliquer un marqueur.");
     const persisted = JSON.parse(fs.readFileSync(path.join(meetingPath, "donnees_escale.json"), "utf8"));
     assert.equal(persisted.markers[0].id, "repere-1");
+    const inboxWithMarker = await fetch(API + "/api/inbox");
+    assert.equal(inboxWithMarker.status, 200);
+    const inboxList = (await inboxWithMarker.json()).items;
+    const recordedMeeting = inboxList.find((item) => item.projectSlug === projectSlug &&
+      item.meetingDirName === meetingDirName);
+    assert.equal(recordedMeeting.markers[0].timeSeconds, 12, "Le marqueur est disponible au lecteur audio.");
     assert.equal(persisted.rawNotes, "Marqueur fictif à 00:03", "Les notes originales doivent rester intactes.");
     const invalidMarker = await json("/api/meetings/save-markers", {
       projectSlug, meetingDirName, markers: [{ id: "bad", timeSeconds: -4, type: "action" }]

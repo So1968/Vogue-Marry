@@ -59,10 +59,13 @@ export default function MeetingModePanel({ projects, onSaved }) {
     return () => window.removeEventListener("storage", refreshRecoverableSession);
   }, []);
 
-  useEffect(() => () => {
-    mountedRef.current = false;
-    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
-    streamRef.current?.getTracks().forEach((track) => track.stop());
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
   }, []);
 
   const selectedProject = projects.find((project) => project.slug === projectSlug) || null;

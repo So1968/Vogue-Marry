@@ -51,7 +51,7 @@ button { font: inherit; }
 .side-nav button { width: 100%; display: grid; grid-template-columns: 40px minmax(0,1fr) auto; align-items: center; gap: 8px; padding: 8px 13px; color: #ecd39c; text-align: left; border: 1px solid transparent; border-radius: 8px; background: transparent; cursor: pointer; }
 .side-nav button:hover { background: rgba(255,255,255,.045); }
 .side-nav button.active { color: #162532; background: linear-gradient(180deg,#fff1c9,#e8cb8e); border-color: #b7873d; box-shadow: inset 0 0 0 2px rgba(255,255,255,.45),0 6px 16px rgba(0,0,0,.26); }
-.nav-icon { display: grid; place-items: center; }
+.side-nav .transcription-shortcut { display: flex; align-items: center; gap: 12px; margin: 8px 3px 3px; padding: 10px 15px; border: 1px solid #ae8550; border-radius: 8px; color: #f3daac; background: rgba(144,92,34,.26); text-decoration: none; font: 600 .9rem Arial,sans-serif; }\n.side-nav .transcription-shortcut:hover, .side-nav .transcription-shortcut:focus-visible { background: #f4ddb1; color: #142533; outline: 2px solid #cfad72; outline-offset: 2px; }\n.nav-icon { display: grid; place-items: center; }
 .nav-label strong { display: block; font-size: 1.03rem; font-weight: 600; }
 .nav-label span { display: block; margin-top: 1px; color: #bda879; font: .72rem Arial,sans-serif; }
 .side-nav button.active .nav-label span { color: #6b5838; }

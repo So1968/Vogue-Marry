@@ -26,3 +26,5 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - name: Vérifier MediaRecorder Firefox par tranches de 5 secondes
         run: node scripts/validate-firefox-mediarecorder.mjs
+      - name: Parcours réel Firefox escale, microphone, sauvegarde
+        run: node scripts/validate-firefox-ui-meeting.mjs

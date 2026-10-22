@@ -82,6 +82,25 @@ try {
   await page.reload();
   await page.locator(".side-nav button").filter({ hasText: "Escales" }).click();
   await page.locator(".meeting-card").filter({ hasText: title }).waitFor({ timeout: 12000 });
+  // Réseau coupé sur le premier envoi progressif : IndexedDB doit permettre
+  // l'envoi final après rétablissement et la réunion ne doit pas être perdue.
+  let interruptedUploads = 0;
+  await page.route("**/api/meetings/audio-chunk", (route) => {
+    if (interruptedUploads++ === 0) return route.abort("failed");
+    return route.continue();
+  });
+  await page.getByLabel("Île / projet").selectOption(slug);
+  await page.getByLabel("Titre de l’escale").fill("Escale test coupure progressive");
+  await page.getByRole("button", { name: "Démarrer l’enregistrement" }).click();
+  await page.getByRole("button", { name: "Arrêter la réunion" }).waitFor({ state: "visible", timeout: 10000 });
+  await page.waitForTimeout(7100);
+  await page.getByRole("button", { name: "Arrêter la réunion" }).click();
+  await page.getByText("Audio finalisé et sauvegardé.", { exact: false }).waitFor({ timeout: 25000 });
+  assert.ok(interruptedUploads >= 2, "La reprise doit retenter un envoi après la coupure.");
+  const secondMeetingFolders = fs.readdirSync(meetingsRoot, { withFileTypes: true })
+    .filter((item) => item.isDirectory());
+  assert.equal(secondMeetingFolders.length, 2, "La capture coupée doit produire une escale supplémentaire.");
+
   console.log("RESULTAT_INTERFACE_FIREFOX", JSON.stringify({
     escales: folders.length, audio: originals[0], markers: meta.markers.length, title
   }));

@@ -18,6 +18,8 @@ test("sauvegarde chiffrée directe : aucune archive claire et restauration possi
     const files = fs.readdirSync(path.dirname(info.archive));
     assert.equal(files.length, 1);
     assert.ok(files[0].endsWith(".enc"));
+    assert.equal(fs.statSync(info.archive).mode & 0o077, 0,
+      "La sauvegarde chiffrée doit être privée des autres utilisateurs Linux.");
     const restore = spawnSync(process.execPath, ["scripts/crypt-local-backup.mjs", "decrypt", info.archive], {
       env, encoding: "utf8"
     });

@@ -301,6 +301,16 @@ test("contrat Réunion : export, audio, journal, validation et protection des é
     assert.equal(repeated.status, 200);
     assert.equal(repeated.data.status, "already-validated");
 
+    // Après validation du journal, le Log Pose doit retrouver cette escale.
+    const logPoseResponse = await fetch(API + "/api/log-pose?projectSlug=" + encodeURIComponent(projectSlug));
+    assert.equal(logPoseResponse.status, 200);
+    const logPoseData = await logPoseResponse.json();
+    assert.equal(logPoseData.logPose.lastMeeting?.meetingDirName, meetingDirName,
+      "Le Log Pose doit rester relié à la dernière escale validée.");
+    // Une phrase dans le journal n'est PAS automatiquement une décision actée.
+    assert.equal(logPoseData.logPose.lastDecision, null,
+      "Une simple phrase de journal ne doit pas devenir une décision validée.");
+
     const protectedChange = await json("/api/meetings/save-report", {
       projectSlug, meetingDirName, content: "Modification non autorisée"
     });

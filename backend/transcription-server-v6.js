@@ -275,7 +275,10 @@ function scanEscales() {
       const data = readJsonIfExists(dataPath);
       if (!data) continue;
       const participants = parseParticipants(data.participants || data.presents || data.presentParticipants || []);
+      const originalAudio = fs.readdirSync(path.join(meetingsRoot, meetingEntry.name))
+        .filter((name) => /^audio_original\\.(webm|ogg|wav|mp3|m4a|mp4|flac)$/iu.test(name));
       escales.push({
+        audioFileName: originalAudio.length === 1 ? originalAudio[0] : null,
         id: `${projectEntry.name}/${meetingEntry.name}`,
         projectSlug: projectEntry.name,
         meetingDirName: meetingEntry.name,

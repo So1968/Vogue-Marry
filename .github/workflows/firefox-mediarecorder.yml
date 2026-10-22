@@ -1,9 +1,21 @@
 name: Validation Firefox MediaRecorder
 
 on:
+  workflow_dispatch:
   pull_request:
     branches:
       - main
+    paths:
+      - ".github/workflows/firefox-mediarecorder.yml"
+      - "backend/server.js"
+      - "src/components/MeetingMode.jsx"
+      - "src/features/meetings/**"
+      - "src/lib/audio-chunk-queue.js"
+      - "src/lib/audio-chunk-sync.js"
+      - "src/lib/local-api.js"
+      - "scripts/validate-firefox-mediarecorder.mjs"
+      - "package.json"
+      - "package-lock.json"
 
 jobs:
   firefox-mediarecorder:

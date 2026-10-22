@@ -1,4 +1,4 @@
-import { Anchor, Bell, BookOpen, ClipboardList, ChevronRight, Compass, FolderOpen, Map, Sailboat, Settings, ShipWheel, Telescope } from "lucide-react";
+import { Anchor, Bell, BookOpen, ClipboardList, ChevronRight, Compass, FolderOpen, Map, Mic, Sailboat, Settings, ShipWheel, Telescope } from "lucide-react";
 
 const MENU = [
   { id: "pont", label: "Pont", sublabel: "Vue d’ensemble", icon: ShipWheel },
@@ -30,6 +30,7 @@ export function Sidebar({ active, onChange, projectCount, meetingCount, journalC
             {counts[id] ? <span className="nav-count">{counts[id]}</span> : null}
           </button>
         ))}
+        <a className="transcription-shortcut" href="/transcription" aria-label="Ouvrir la transcription des réunions"><Mic size={22} /><span>Transcrire une escale</span></a>
       </nav>
       <div className="captain-card">
         <div className="captain-avatar">M</div>

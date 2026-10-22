@@ -86,6 +86,22 @@ test("contrat Réunion : export, audio, journal, validation et protection des é
     assert.equal(audioData.audioFileName, "audio_original.webm");
     assert.equal(fs.readFileSync(path.join(meetingPath, "audio_original.webm"), "utf8"), "contenu audio simulé");
 
+    const duplicateForm = new FormData();
+    duplicateForm.append("projectName", "Île de contrat fictive");
+    duplicateForm.append("meetingDirName", meetingDirName);
+    duplicateForm.append("audio", new Blob(["contenu audio simulé"], { type: "audio/webm" }), "reunion.webm");
+    const duplicate = await fetch(API + "/api/meetings/export-audio", { method: "POST", body: duplicateForm });
+    assert.equal(duplicate.status, 200, "Réessayer le même bloc audio doit être idempotent.");
+    assert.equal((await duplicate.json()).status, "already-uploaded");
+
+    const differentForm = new FormData();
+    differentForm.append("projectName", "Île de contrat fictive");
+    differentForm.append("meetingDirName", meetingDirName);
+    differentForm.append("audio", new Blob(["contenu audio différent"], { type: "audio/webm" }), "reunion.webm");
+    const conflict = await fetch(API + "/api/meetings/export-audio", { method: "POST", body: differentForm });
+    assert.equal(conflict.status, 409, "Un autre audio ne doit pas écraser la source.");
+    assert.equal(fs.readFileSync(path.join(meetingPath, "audio_original.webm"), "utf8"), "contenu audio simulé");
+
     const initial = await json("/api/meetings/read-report", { projectSlug, meetingDirName });
     assert.equal(initial.status, 200);
     assert.equal(initial.data.reportType, "exporte");

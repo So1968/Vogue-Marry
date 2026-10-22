@@ -1001,7 +1001,14 @@ app.post("/api/meetings/export-audio", upload.single("audio"), (req, res) => {
 
     const extension = path.extname(req.file.originalname || "") || ".webm";
     const audioPath = path.join(meetingDir, `audio_original${extension}`);
-    fs.writeFileSync(audioPath, req.file.buffer);
+    if (fs.existsSync(audioPath)) {
+      const existingAudio = fs.readFileSync(audioPath);
+      if (!existingAudio.equals(req.file.buffer)) {
+        return res.status(409).json({ error: "Un audio original existe déjà pour cette escale. Il est conservé sans modification." });
+      }
+      return res.status(200).json({ status: "already-uploaded", audioFileName: path.basename(audioPath) });
+    }
+    fs.writeFileSync(audioPath, req.file.buffer, { flag: "wx" });
 
     res.status(201).json({ status: "ok", audioFileName: path.basename(audioPath) });
   } catch (error) {

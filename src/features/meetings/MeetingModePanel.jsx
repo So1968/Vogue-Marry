@@ -230,6 +230,7 @@ export default function MeetingModePanel({ projects, onSaved }) {
     } catch (recordingError) {
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
+      recorderRef.current = null;
       recordingLockRef.current?.();
       setError(recordingError.message || "Le microphone n’a pas pu être activé.");
     }

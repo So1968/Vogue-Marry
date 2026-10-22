@@ -23,7 +23,13 @@ jobs:
           npm install --no-save --package-lock=false playwright
           npx playwright install firefox
       - name: Installer ffmpeg/ffprobe
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+        run: |
+          if ! command -v ffmpeg >/dev/null 2>&1 || ! command -v ffprobe >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+          ffmpeg -version
+          ffprobe -version
       - name: Vérifier MediaRecorder Firefox par tranches de 5 secondes
         run: node scripts/validate-firefox-mediarecorder.mjs
       - name: Parcours réel Firefox escale, microphone, sauvegarde

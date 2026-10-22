@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import MeetingMode from "../../components/MeetingMode.jsx";
 import { exportMeeting, saveMeetingMarkers, uploadMeetingAudioChunk } from "../../lib/local-api.js";
-import { keepAudioChunk, pendingAudioChunks, rememberAudioSession, recoverAudioSession } from "../../lib/audio-chunk-queue.js";
+import { keepAudioChunk, getAudioChunk, pendingAudioChunks, rememberAudioSession, recoverAudioSession } from "../../lib/audio-chunk-queue.js";
 import { preparePartialAudioExport } from "../../lib/audio-partial-recovery.js";
 import { syncAudioSession } from "../../lib/audio-chunk-sync.js";
 import { keepLocalMarkers, recoverLocalMarkers, clearLocalMarkers } from "../../lib/meeting-marker-backup.js";
@@ -168,12 +168,16 @@ export default function MeetingModePanel({ projects, onSaved }) {
             // Le bloc est d'abord durable dans IndexedDB ; l'envoi n'efface jamais cette copie.
             // Les envois sont ordonnés et une panne réseau ne stoppe pas la capture.
             uploadsRef.current = uploadsRef.current
-              .then(() => uploadMeetingAudioChunk({
-                projectName: session.projectName,
-                meetingDirName: session.meetingDirName,
-                index,
-                blob: event.data
-              }))
+              .then(async () => {
+                const persisted = await getAudioChunk(session.sessionId, index);
+                if (!persisted?.blob) throw new Error("Bloc audio local introuvable.");
+                return uploadMeetingAudioChunk({
+                  projectName: session.projectName,
+                  meetingDirName: session.meetingDirName,
+                  index,
+                  blob: persisted.blob
+                });
+              })
               .catch(() => {
                 // La reprise finale consultera les blocs réellement reçus par le serveur.
               });

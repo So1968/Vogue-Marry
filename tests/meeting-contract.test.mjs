@@ -118,6 +118,30 @@ test("contrat Réunion : export, audio, journal, validation et protection des é
       const response = await fetch(API + "/api/meetings/audio-chunk", { method: "POST", body: payload });
       return { status: response.status, data: await response.json() };
     }
+    // Les index et chemins malformés ne doivent jamais produire de fichier.
+    assert.equal((await sendChunk(-1, "bloc-invalide")).status, 400);
+    assert.equal((await sendChunk(100001, "bloc-invalide")).status, 400);
+    const forbidden = new FormData();
+    forbidden.append("projectName", "Île de contrat fictive");
+    forbidden.append("meetingDirName", "../autre_dossier");
+    forbidden.append("index", "0");
+    forbidden.append("audio", new Blob(["attaque fictive"]), "bloc.webm");
+    const traversalResponse = await fetch(API + "/api/meetings/audio-chunk", {
+      method: "POST", body: forbidden
+    });
+    assert.equal(traversalResponse.status, 400);
+    const empty = new FormData();
+    empty.append("projectName", "Île de contrat fictive");
+    empty.append("meetingDirName", chunkName);
+    empty.append("index", "0");
+    empty.append("audio", new Blob([]), "bloc.webm");
+    const emptyResponse = await fetch(API + "/api/meetings/audio-chunk", {
+      method: "POST", body: empty
+    });
+    assert.equal(emptyResponse.status, 400);
+    assert.equal((await json("/api/meetings/audio-chunks-finalize", {
+      projectName: "Île de contrat fictive", meetingDirName: chunkName, count: 0
+    })).status, 400);
     assert.equal((await sendChunk(0, "bloc-0")).status, 201);
     assert.equal((await sendChunk(0, "bloc-0")).data.status, "already-uploaded");
     assert.equal((await sendChunk(0, "bloc-different")).status, 409);
@@ -131,18 +155,85 @@ test("contrat Réunion : export, audio, journal, validation et protection des é
     });
     assert.equal(missing.status, 409);
     assert.equal((await sendChunk(1, "bloc-1")).status, 201);
-    const final = await json("/api/meetings/audio-chunks-finalize", {
+    assert.equal((await sendChunk(3, "bloc-3")).status, 201);
+    const truncated = await json("/api/meetings/audio-chunks-finalize", {
       projectName: "Île de contrat fictive", meetingDirName: chunkName, count: 3
+    });
+    assert.equal(truncated.status, 409, "Le serveur refuse d'oublier un dernier bloc enregistré.");
+    const final = await json("/api/meetings/audio-chunks-finalize", {
+      projectName: "Île de contrat fictive", meetingDirName: chunkName, count: 4
     });
     assert.equal(final.status, 201, JSON.stringify(final.data));
     const chunkAudio = path.join(home, "VOGUE-MERRY-DONNEES", "01_PROJETS",
       projectSlug, "01_escales_reunions", chunkName, "audio_original.webm");
-    assert.equal(fs.readFileSync(chunkAudio, "utf8"), "bloc-0bloc-1bloc-2");
+    assert.equal(fs.readFileSync(chunkAudio, "utf8"), "bloc-0bloc-1bloc-2bloc-3");
+    const retryFinal = await json("/api/meetings/audio-chunks-finalize", {
+      projectName: "Île de contrat fictive", meetingDirName: chunkName, count: 4
+    });
+    assert.equal(retryFinal.status, 200);
+    assert.equal(retryFinal.data.status, "already-finalized");
     const secondFinal = await json("/api/meetings/audio-chunks-finalize", {
       projectName: "Île de contrat fictive", meetingDirName: chunkName, count: 3
     });
     assert.equal(secondFinal.status, 409);
-    assert.equal(fs.readFileSync(chunkAudio, "utf8"), "bloc-0bloc-1bloc-2");
+    assert.equal(fs.readFileSync(chunkAudio, "utf8"), "bloc-0bloc-1bloc-2bloc-3");
+
+    // Interruption simulée : blocs 0 et 2 arrivés, réseau repris plus tard.
+    const resumedMeeting = await json("/api/meetings/export", {
+      projectName: "Île de contrat fictive", title: "Reprise après interruption",
+      meetingDate: "2026-10-22", meetingType: "réunion", participants: "Intervenant fictif"
+    });
+    assert.equal(resumedMeeting.status, 201);
+    const resumedName = resumedMeeting.data.meetingDirName;
+    async function resumeChunk(index, body) {
+      const payload = new FormData();
+      payload.append("projectName", "Île de contrat fictive");
+      payload.append("meetingDirName", resumedName);
+      payload.append("index", String(index));
+      payload.append("audio", new Blob([body], { type: "audio/webm" }), "part.webm");
+      const response = await fetch(API + "/api/meetings/audio-chunk", { method: "POST", body: payload });
+      return { status: response.status, data: await response.json() };
+    }
+    assert.equal((await resumeChunk(0, "A")).status, 201);
+    assert.equal((await resumeChunk(2, "C")).status, 201);
+    const interruptedStatus = await json("/api/meetings/audio-chunks-status", {
+      projectName: "Île de contrat fictive", meetingDirName: resumedName
+    });
+    assert.deepEqual(interruptedStatus.data.received, [0, 2]);
+    const premature = await json("/api/meetings/audio-chunks-finalize", {
+      projectName: "Île de contrat fictive", meetingDirName: resumedName, count: 3
+    });
+    assert.equal(premature.status, 409, "Aucune finalisation avec un bloc manquant.");
+    const resumedAudio = path.join(home, "VOGUE-MERRY-DONNEES", "01_PROJETS",
+      projectSlug, "01_escales_reunions", resumedName, "audio_original.webm");
+    assert.equal(fs.existsSync(resumedAudio), false);
+    assert.equal((await resumeChunk(0, "A")).data.status, "already-uploaded");
+    assert.equal((await resumeChunk(1, "B")).status, 201);
+    const completed = await json("/api/meetings/audio-chunks-finalize", {
+      projectName: "Île de contrat fictive", meetingDirName: resumedName, count: 3
+    });
+    assert.equal(completed.status, 201);
+    assert.equal(fs.readFileSync(resumedAudio, "utf8"), "ABC");
+    assert.equal((await json("/api/meetings/audio-chunks-finalize", {
+      projectName: "Île de contrat fictive", meetingDirName: resumedName, count: 3
+    })).data.status, "already-finalized");
+
+    const marker = { id: "repere-1", type: "decision", timeSeconds: 12, label: "Décision" };
+    const markerSaved = await json("/api/meetings/save-markers", {
+      projectSlug, meetingDirName, markers: [marker]
+    });
+    assert.equal(markerSaved.status, 200);
+    const markerRepeated = await json("/api/meetings/save-markers", {
+      projectSlug, meetingDirName, markers: [marker]
+    });
+    assert.equal(markerRepeated.data.count, 1, "Réessayer ne doit pas dupliquer un marqueur.");
+    const persisted = JSON.parse(fs.readFileSync(path.join(meetingPath, "donnees_escale.json"), "utf8"));
+    assert.equal(persisted.markers[0].id, "repere-1");
+    assert.equal(persisted.rawNotes, "Marqueur fictif à 00:03", "Les notes originales doivent rester intactes.");
+    const invalidMarker = await json("/api/meetings/save-markers", {
+      projectSlug, meetingDirName, markers: [{ id: "bad", timeSeconds: -4, type: "action" }]
+    });
+    assert.equal(invalidMarker.status, 400);
 
     const initial = await json("/api/meetings/read-report", { projectSlug, meetingDirName });
     assert.equal(initial.status, 200);

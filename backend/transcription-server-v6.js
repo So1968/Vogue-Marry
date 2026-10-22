@@ -8,7 +8,11 @@ import { createHash, randomUUID } from "crypto";
 import { spawn, spawnSync } from "child_process";
 import { fileURLToPath } from "url";
 
-// Les nouveaux fichiers de données, temporaires et secrets sont privés par défaut.\n// Ne change pas rétroactivement les droits des dossiers déjà existants.\nprocess.umask(0o077);\n\nconst app = express();
+// Les nouveaux fichiers de données, temporaires et secrets sont privés par défaut.
+// Ne change pas rétroactivement les droits des dossiers déjà existants.
+process.umask(0o077);
+
+const app = express();
 const PORT = Number(process.env.VOGUE_TRANSCRIPTION_PORT || 8011);
 const HOME = os.homedir();
 const DATA_ROOT = path.join(HOME, "VOGUE-MERRY-DONNEES");

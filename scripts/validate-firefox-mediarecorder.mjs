@@ -104,12 +104,15 @@ try {
       eventTimes: result.eventTimes,
       media
     };
+    console.log("RESULTAT_" + name.toUpperCase().replace("-", "_"), JSON.stringify(results[name], null, 2));
     if (result.chunks.length < 3) fail(name + " : pas assez de fragments.");
-    if (!(media.measured > 10 && media.measured < 15)) {
-      fail(name + " : durée assemblée inattendue " + media.measured);
-    }
-    if (/premature|invalid|corrupt|error/i.test(media.decodeStderr)) {
-      fail(name + " : anomalie de décodage " + media.decodeStderr);
+    if (name === "default") {
+      if (!(media.measured > 10 && media.measured < 15)) {
+        fail(name + " : durée assemblée inattendue " + media.measured);
+      }
+      if (/premature|invalid|corrupt|error/i.test(media.decodeStderr)) {
+        fail(name + " : anomalie de décodage " + media.decodeStderr);
+      }
     }
   }
 

@@ -306,6 +306,62 @@ function findReportPaths(meetingDir) {
   };
 }
 
+const AUDIO_MIME_EXTENSIONS = new Map([
+  ["audio/webm", ".webm"],
+  ["video/webm", ".webm"],
+  ["audio/ogg", ".ogg"],
+  ["application/ogg", ".ogg"],
+  ["audio/mp4", ".m4a"],
+  ["video/mp4", ".mp4"],
+  ["audio/mpeg", ".mp3"],
+  ["audio/wav", ".wav"],
+  ["audio/x-wav", ".wav"]
+]);
+const AUDIO_EXTENSIONS = new Set(AUDIO_MIME_EXTENSIONS.values());
+
+function audioDescriptor(file) {
+  const mimeType = String(file?.mimetype || "").split(";")[0].trim().toLowerCase();
+  const originalExtension = path.extname(file?.originalname || "").toLowerCase();
+  const extension = AUDIO_MIME_EXTENSIONS.get(mimeType) ||
+    (AUDIO_EXTENSIONS.has(originalExtension) ? originalExtension : "");
+  if (!extension) throw new Error("Format audio non pris en charge.");
+  return { mimeType: mimeType || "application/octet-stream", extension };
+}
+
+function readAudioChunkManifest(chunksDir) {
+  const manifest = readJsonIfExists(path.join(chunksDir, "manifest.json"));
+  if (!manifest || !AUDIO_EXTENSIONS.has(manifest.extension)) return null;
+  return {
+    mimeType: String(manifest.mimeType || "application/octet-stream"),
+    extension: manifest.extension
+  };
+}
+
+function ensureAudioChunkManifest(chunksDir, descriptor) {
+  const manifestPath = path.join(chunksDir, "manifest.json");
+  try {
+    fs.writeFileSync(manifestPath, JSON.stringify(descriptor, null, 2), { flag: "wx" });
+    return descriptor;
+  } catch (error) {
+    if (error?.code !== "EEXIST") throw error;
+  }
+  const existing = readAudioChunkManifest(chunksDir);
+  if (!existing || existing.extension !== descriptor.extension) {
+    throw new Error("Les fragments audio n'utilisent pas tous le même format.");
+  }
+  return existing;
+}
+
+function audioOriginalFiles(meetingDir) {
+  try {
+    return fs.readdirSync(meetingDir)
+      .filter((name) => name.startsWith("audio_original."))
+      .sort();
+  } catch {
+    return [];
+  }
+}
+
 const KNOWLEDGE_CONFIG = {
   action: {
     label: "Manœuvres",
@@ -1064,16 +1120,17 @@ app.post("/api/meetings/audio-chunk", upload.single("audio"), (req, res) => {
     if (!Number.isSafeInteger(index) || index < 0 || index > 100000) throw new Error("Indice de bloc invalide.");
     const chunksDir = path.join(meetingDir, "audio_chunks");
     ensureDir(chunksDir);
+    const descriptor = ensureAudioChunkManifest(chunksDir, audioDescriptor(req.file));
     const fileName = `chunk_${String(index).padStart(6, "0")}.part`;
     const filePath = path.join(chunksDir, fileName);
     if (fs.existsSync(filePath)) {
       if (!fs.readFileSync(filePath).equals(req.file.buffer)) {
         return res.status(409).json({ error: "Ce bloc existe déjà avec un contenu différent." });
       }
-      return res.json({ status: "already-uploaded", index });
+      return res.json({ status: "already-uploaded", index, ...descriptor });
     }
     fs.writeFileSync(filePath, req.file.buffer, { flag: "wx" });
-    return res.status(201).json({ status: "ok", index });
+    return res.status(201).json({ status: "ok", index, ...descriptor });
   } catch (error) {
     return res.status(400).json({ error: error.message || "Impossible de sauvegarder le bloc audio." });
   }
@@ -1089,7 +1146,8 @@ app.post("/api/meetings/audio-chunks-status", (req, res) => {
       ? fs.readdirSync(chunksDir).filter((name) => /^chunk_\d{6}\.part$/u.test(name))
         .map((name) => Number(name.slice(6, 12))).sort((a, b) => a - b)
       : [];
-    return res.json({ status: "ok", received });
+    const manifest = fs.existsSync(chunksDir) ? readAudioChunkManifest(chunksDir) : null;
+    return res.json({ status: "ok", received, ...(manifest || {}) });
   } catch (error) {
     return res.status(400).json({ error: error.message || "Impossible de lister les blocs audio." });
   }
@@ -1117,8 +1175,20 @@ app.post("/api/meetings/audio-chunks-finalize", (req, res) => {
     if (paths.some((filePath) => fs.statSync(filePath).size === 0)) {
       return res.status(409).json({ error: "Un fragment audio est vide. Finalisation refusée." });
     }
-    const audioPath = path.join(meetingDir, "audio_original.webm");
-    if (fs.existsSync(audioPath)) {
+
+    // Compatibilité avec les toutes premières files de fragments, créées avant
+    // l'enregistrement explicite du type : elles étaient exclusivement WebM.
+    const manifest = readAudioChunkManifest(chunksDir) || { mimeType: "audio/webm", extension: ".webm" };
+    const audioFileName = `audio_original${manifest.extension}`;
+    const audioPath = path.join(meetingDir, audioFileName);
+    const originals = audioOriginalFiles(meetingDir);
+    if (originals.length > 1) {
+      return res.status(409).json({ error: "Plusieurs audios originaux existent déjà. Vérification manuelle nécessaire." });
+    }
+    if (originals.length === 1) {
+      if (originals[0] !== audioFileName) {
+        return res.status(409).json({ error: "Un audio original existe déjà dans un autre format. Il ne sera pas remplacé." });
+      }
       // Accusé de réception perdu : une relance identique est sûre uniquement
       // si l'original correspond exactement à la concaténation des blocs.
       const existing = fs.readFileSync(audioPath);
@@ -1135,11 +1205,14 @@ app.post("/api/meetings/audio-chunks-finalize", (req, res) => {
           offset += block.length;
         }
         if (identical) {
-          return res.status(200).json({ status: "already-finalized", audioFileName: "audio_original.webm", blocks: count });
+          return res.status(200).json({
+            status: "already-finalized", audioFileName, blocks: count, mimeType: manifest.mimeType
+          });
         }
       }
       return res.status(409).json({ error: "Un audio original différent existe déjà. Il ne sera pas remplacé." });
     }
+
     const temporaryPath = path.join(meetingDir, `audio_assembly_${process.pid}_${Date.now()}.tmp`);
     try {
       const fd = fs.openSync(temporaryPath, "wx");
@@ -1153,7 +1226,9 @@ app.post("/api/meetings/audio-chunks-finalize", (req, res) => {
     } finally {
       if (fs.existsSync(temporaryPath)) fs.unlinkSync(temporaryPath);
     }
-    return res.status(201).json({ status: "ok", audioFileName: "audio_original.webm", blocks: count });
+    return res.status(201).json({
+      status: "ok", audioFileName, blocks: count, mimeType: manifest.mimeType
+    });
   } catch (error) {
     return res.status(400).json({ error: error.message || "Impossible de finaliser l'audio." });
   }

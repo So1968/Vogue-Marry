@@ -27,3 +27,21 @@ __pycache__/
 *.njsproj
 *.sln
 *.sw?
+
+# Données et secrets locaux Vogue Mary
+.env
+.env.*
+!.env.example
+VOGUE-MERRY-DONNEES/
+**/VOGUE-MERRY-DONNEES/
+
+# Captures et fragments audio réels : toujours hors Git
+*.webm
+*.wav
+*.mp3
+*.m4a
+*.ogg
+*.opus
+*.flac
+*.aac
+*.part

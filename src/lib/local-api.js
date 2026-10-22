@@ -173,6 +173,11 @@ export function finalizeMeetingAudioChunks({ projectName, meetingDirName, count 
   });
 }
 
+export function meetingAudioUrl({ projectSlug, meetingDirName }) {
+  const params = new URLSearchParams({ projectSlug, meetingDirName });
+  return `${API_BASE}/api/meetings/audio?${params.toString()}`;
+}
+
 export function saveMeetingMarkers({ projectSlug, meetingDirName, markers }) {
   return localApi("/api/meetings/save-markers", {
     method: "POST",

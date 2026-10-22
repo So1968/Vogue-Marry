@@ -116,6 +116,81 @@ try {
     }
   }
 
+  // Simule la fermeture d'un onglet pendant l'enregistrement : seuls les
+  // blocs déjà persistés doivent survivre. Le bloc en cours est perdu.
+  const crashPage = await context.newPage();
+  await crashPage.goto(origin);
+  const recorded = await crashPage.evaluate(async () => {
+    const request = indexedDB.open("vogue-firefox-crash-test", 1);
+    request.onupgradeneeded = () => request.result.createObjectStore("chunks");
+    const db = await new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const recorder = new MediaRecorder(stream);
+    let written = 0;
+    recorder.addEventListener("dataavailable", (event) => {
+      if (!event.data.size) return;
+      const tx = db.transaction("chunks", "readwrite");
+      tx.objectStore("chunks").put(event.data, written);
+      tx.oncomplete = () => { written++; };
+    });
+    recorder.start(1000);
+    await new Promise((resolve, reject) => {
+      const started = performance.now();
+      const timer = setInterval(() => {
+        if (written >= 3) {
+          clearInterval(timer);
+          resolve();
+        } else if (performance.now() - started > 12000) {
+          clearInterval(timer);
+          reject(new Error("Aucun bloc persisté avant interruption"));
+        }
+      }, 100);
+    });
+    // Ne pas appeler recorder.stop() : la page va être fermée brutalement.
+    return { persisted: written, mimeType: recorder.mimeType };
+  });
+  await crashPage.close();
+  const recoveryPage = await context.newPage();
+  await recoveryPage.goto(origin);
+  const recovered = await recoveryPage.evaluate(async () => {
+    const request = indexedDB.open("vogue-firefox-crash-test", 1);
+    const db = await new Promise((resolve, reject) => {
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+    const tx = db.transaction("chunks", "readonly");
+    const blobs = await new Promise((resolve, reject) => {
+      const read = tx.objectStore("chunks").getAll();
+      read.onsuccess = () => resolve(read.result);
+      read.onerror = () => reject(read.error);
+    });
+    db.close();
+    const joined = new Blob(blobs, { type: blobs[0]?.type });
+    const bytes = new Uint8Array(await joined.arrayBuffer());
+    const encoded = [];
+    for (let offset = 0; offset < bytes.length; offset += 0x8000) {
+      encoded.push(String.fromCharCode(...bytes.subarray(offset, offset + 0x8000)));
+    }
+    return { count: blobs.length, sizes: blobs.map((blob) => blob.size), base64: btoa(encoded.join("")) };
+  });
+  await recoveryPage.close();
+  if (recovered.count < recorded.persisted || recovered.sizes.some((size) => size === 0)) {
+    fail("Fermeture brutale : blocs IndexedDB perdus ou vides.");
+  }
+  const emergencyPath = "/tmp/vogue-firefox-crash-recovery.bin";
+  fs.writeFileSync(emergencyPath, Buffer.from(recovered.base64, "base64"));
+  const recoveredMedia = probeFile(emergencyPath);
+  if (!(recoveredMedia.measured > 1)) fail("Fermeture brutale : aucun audio lisible récupéré.");
+  console.log("RESULTAT_FERMETURE_BRUTALE", JSON.stringify({
+    persistedBeforeClose: recorded.persisted,
+    recoveredAfterReopen: recovered.count,
+    recoveredSeconds: recoveredMedia.measured,
+    mimeType: recorded.mimeType
+  }));
+
   console.log(JSON.stringify(results, null, 2));
 } finally {
   await browser.close();

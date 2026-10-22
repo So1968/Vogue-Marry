@@ -1071,9 +1071,37 @@ app.post("/api/meetings/audio-chunks-finalize", (req, res) => {
     if (paths.some((filePath) => !fs.existsSync(filePath))) {
       return res.status(409).json({ error: "Il manque des blocs audio. Finalisation refusée." });
     }
+    const diskIndices = fs.readdirSync(chunksDir)
+      .filter((name) => /^chunk_\d{6}\.part$/u.test(name))
+      .map((name) => Number(name.slice(6, 12)));
+    if (diskIndices.length !== count || diskIndices.some((index) => index >= count)) {
+      return res.status(409).json({ error: "Le nombre de blocs ne correspond pas aux fragments reçus. Finalisation refusée." });
+    }
+    if (paths.some((filePath) => fs.statSync(filePath).size === 0)) {
+      return res.status(409).json({ error: "Un fragment audio est vide. Finalisation refusée." });
+    }
     const audioPath = path.join(meetingDir, "audio_original.webm");
     if (fs.existsSync(audioPath)) {
-      return res.status(409).json({ error: "Un audio original existe déjà. Il ne sera pas remplacé." });
+      // Accusé de réception perdu : une relance identique est sûre uniquement
+      // si l'original correspond exactement à la concaténation des blocs.
+      const existing = fs.readFileSync(audioPath);
+      const totalBytes = paths.reduce((sum, filePath) => sum + fs.statSync(filePath).size, 0);
+      if (existing.length === totalBytes) {
+        let offset = 0;
+        let identical = true;
+        for (const filePath of paths) {
+          const block = fs.readFileSync(filePath);
+          if (!existing.subarray(offset, offset + block.length).equals(block)) {
+            identical = false;
+            break;
+          }
+          offset += block.length;
+        }
+        if (identical) {
+          return res.status(200).json({ status: "already-finalized", audioFileName: "audio_original.webm", blocks: count });
+        }
+      }
+      return res.status(409).json({ error: "Un audio original différent existe déjà. Il ne sera pas remplacé." });
     }
     const temporaryPath = path.join(meetingDir, `audio_assembly_${process.pid}_${Date.now()}.tmp`);
     try {

@@ -27,6 +27,7 @@ export default function MeetingModePanel({ projects, onSaved }) {
   const [error, setError] = useState("");
   const recorderRef = useRef(null);
   const startingRef = useRef(false);
+  const recordingLockRef = useRef(null);
   const streamRef = useRef(null);
   const writesRef = useRef(Promise.resolve());
   const uploadsRef = useRef(Promise.resolve());
@@ -65,6 +66,7 @@ export default function MeetingModePanel({ projects, onSaved }) {
       mountedRef.current = false;
       if (recorderRef.current?.state === "recording") recorderRef.current.stop();
       streamRef.current?.getTracks().forEach((track) => track.stop());
+      recordingLockRef.current?.();
     };
   }, []);
 
@@ -75,7 +77,27 @@ export default function MeetingModePanel({ projects, onSaved }) {
     if (startingRef.current || recorderRef.current) return;
     startingRef.current = true;
     try {
-      await startRecordingOnce();
+      // L'API Web Locks arbitre atomiquement les démarrages entre onglets.
+      // Sans elle, on refuse la capture au lieu de risquer deux sessions.
+      if (!navigator.locks?.request) {
+        setError("Ce navigateur ne permet pas de sécuriser plusieurs onglets. Utilisez Firefox récent.");
+        return;
+      }
+      await navigator.locks.request("vogue-mary-audio-recording", { ifAvailable: true }, async (lock) => {
+        if (!lock) {
+          setError("Un autre onglet utilise déjà l'enregistrement Vogue Mary.");
+          return;
+        }
+        let unlock;
+        const hold = new Promise((resolve) => { unlock = resolve; });
+        recordingLockRef.current = unlock;
+        try {
+          await startRecordingOnce();
+          if (recorderRef.current) await hold;
+        } finally {
+          if (recordingLockRef.current === unlock) recordingLockRef.current = null;
+        }
+      });
     } finally {
       startingRef.current = false;
     }
@@ -173,6 +195,7 @@ export default function MeetingModePanel({ projects, onSaved }) {
         stream.getTracks().forEach((track) => track.stop());
         streamRef.current = null;
         recorderRef.current = null;
+        recordingLockRef.current?.();
         try {
           await writesRef.current;
           if (chunkWriteErrorRef.current) throw chunkWriteErrorRef.current;
@@ -207,6 +230,7 @@ export default function MeetingModePanel({ projects, onSaved }) {
     } catch (recordingError) {
       streamRef.current?.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
+      recordingLockRef.current?.();
       setError(recordingError.message || "Le microphone n’a pas pu être activé.");
     }
   }

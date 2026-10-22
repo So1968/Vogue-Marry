@@ -85,6 +85,10 @@ test("parcours réel API locale sur une île fictive isolée : créer, reprendre
     const invalidUpdate = await call("/api/knowledge/action/update-status", "POST", { projectSlug: slug, itemId: "inconnu", statut: "Terminé" });
     assert.equal(invalidUpdate.status, 400, "Ne pas changer le statut d'une action non validée.");
     assert.ok(fs.existsSync(path.join(home, "VOGUE-MERRY-DONNEES", "01_PROJETS", slug)), "Données isolées de démonstration attendues.");
+    const projectDirectory = path.join(home, "VOGUE-MERRY-DONNEES", "01_PROJETS", slug);
+    assert.equal(fs.statSync(projectDirectory).mode & 0o077, 0,
+      "Les dossiers nouvellement créés ne doivent pas être accessibles aux autres utilisateurs.");
+
   } finally {
     child.kill("SIGTERM");
     await Promise.race([new Promise((resolve) => child.once("exit", resolve)), delay(2000)]);

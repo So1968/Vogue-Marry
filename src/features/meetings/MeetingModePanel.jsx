@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import MeetingMode from "../../components/MeetingMode.jsx";
-import { exportMeeting, saveMeetingMarkers } from "../../lib/local-api.js";
+import { exportMeeting, saveMeetingMarkers, uploadMeetingAudioChunk } from "../../lib/local-api.js";
 import { keepAudioChunk, pendingAudioChunks, rememberAudioSession, recoverAudioSession } from "../../lib/audio-chunk-queue.js";
 import { preparePartialAudioExport } from "../../lib/audio-partial-recovery.js";
 import { syncAudioSession } from "../../lib/audio-chunk-sync.js";
@@ -28,6 +28,7 @@ export default function MeetingModePanel({ projects, onSaved }) {
   const recorderRef = useRef(null);
   const streamRef = useRef(null);
   const writesRef = useRef(Promise.resolve());
+  const uploadsRef = useRef(Promise.resolve());
   const chunkWriteErrorRef = useRef(null);
   const markerWritesRef = useRef(Promise.resolve());
   const markerErrorRef = useRef(null);
@@ -115,6 +116,7 @@ export default function MeetingModePanel({ projects, onSaved }) {
       markerErrorRef.current = null;
       setRecoverableSession(session);
       writesRef.current = Promise.resolve();
+      uploadsRef.current = Promise.resolve();
       chunkWriteErrorRef.current = null;
       recorderRef.current = recorder;
       recorder.ondataavailable = (event) => {
@@ -126,6 +128,18 @@ export default function MeetingModePanel({ projects, onSaved }) {
           .then(async () => {
             if (chunkWriteErrorRef.current) return;
             await keepAudioChunk(session.sessionId, index, event.data);
+            // Le bloc est d'abord durable dans IndexedDB ; l'envoi n'efface jamais cette copie.
+            // Les envois sont ordonnés et une panne réseau ne stoppe pas la capture.
+            uploadsRef.current = uploadsRef.current
+              .then(() => uploadMeetingAudioChunk({
+                projectName: session.projectName,
+                meetingDirName: session.meetingDirName,
+                index,
+                blob: event.data
+              }))
+              .catch(() => {
+                // La reprise finale consultera les blocs réellement reçus par le serveur.
+              });
           })
           .catch((writeError) => {
             chunkWriteErrorRef.current = writeError;
@@ -153,6 +167,7 @@ export default function MeetingModePanel({ projects, onSaved }) {
           rememberAudioSession(session);
           await markerWritesRef.current;
           await savePendingMarkers(session);
+          await uploadsRef.current;
           await syncAudioSession(session);
           if (!mountedRef.current) return;
           clearLocalMarkers(session.sessionId);

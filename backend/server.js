@@ -14,6 +14,10 @@ import { makeLogPoseWriter } from "./lib/log-pose-writer.js";
 import { makeLogPoseSynthesis } from "./lib/log-pose-synthesis.js";
 import { normalizeKnowledgeText, extractMarkdownSection, parseKnowledgeSection, pickKnowledgeValue } from "./lib/knowledge-markdown.js";
 
+// Les nouveaux fichiers de données, temporaires et secrets sont privés par défaut.
+// Ne change pas rétroactivement les droits des dossiers déjà existants.
+process.umask(0o077);
+
 const app = express();
 const PORT = 8010;
 const TRANSCRIPTION_HOST = "127.0.0.1";

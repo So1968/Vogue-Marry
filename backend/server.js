@@ -1234,6 +1234,32 @@ app.post("/api/meetings/audio-chunks-finalize", (req, res) => {
   }
 });
 
+// Écoute locale du fichier original ; les marqueurs restent dans les métadonnées.
+app.get("/api/meetings/audio", (req, res) => {
+  try {
+    const projectSlug = safeSegment(req.query.projectSlug);
+    const meetingDirName = safeSegment(req.query.meetingDirName);
+    if (!projectSlug || !meetingDirName) return res.status(400).json({ error: "Escale invalide." });
+    const meetingDir = findMeetingDir(projectSlug, meetingDirName);
+    if (!fs.existsSync(path.join(meetingDir, "donnees_escale.json"))) {
+      return res.status(404).json({ error: "Escale introuvable." });
+    }
+    const originals = audioOriginalFiles(meetingDir);
+    if (originals.length !== 1) {
+      return res.status(404).json({ error: "Aucun audio original unique à écouter." });
+    }
+    const originalPath = path.join(meetingDir, originals[0]);
+    if (!fs.lstatSync(originalPath).isFile()) {
+      return res.status(409).json({ error: "Audio original non régulier." });
+    }
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    return res.sendFile(originalPath);
+  } catch (error) {
+    return res.status(400).json({ error: error.message || "Écoute indisponible." });
+  }
+});
+
 app.get("/api/inbox", (req, res) => {
   try {
     ensureDir(PROJECTS_ROOT);
@@ -1278,6 +1304,7 @@ app.get("/api/inbox", (req, res) => {
           hasValidatedReport,
           hasTranscription,
           hasRawNotes,
+          markers: Array.isArray(data?.markers) ? data.markers : [],
         });
       }
     }

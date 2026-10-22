@@ -1100,6 +1100,33 @@ app.get("/api/transcription/escales", (req, res) => {
   res.json({ escales: scanEscales() });
 });
 
+// Sert uniquement l'audio original d'une escale connue, jamais un chemin arbitraire.
+app.get("/api/transcription/escales/:projectSlug/:meetingDirName/audio", (req, res) => {
+  const meetingId = `${req.params.projectSlug}/${req.params.meetingDirName}`;
+  const meeting = meetingById(meetingId);
+  const dataPath = speakerMeetingDataPath(meetingId);
+  if (!meeting || !dataPath || !fs.existsSync(dataPath)) {
+    return res.status(404).json({ error: "Escale introuvable." });
+  }
+  try {
+    const meetingDir = path.dirname(dataPath);
+    const originals = fs.readdirSync(meetingDir)
+      .filter((name) => /^audio_original\\.(webm|ogg|wav|mp3|m4a|mp4|flac)$/iu.test(name));
+    if (originals.length !== 1) {
+      return res.status(409).json({ error: "Audio original absent ou ambigu. Vérification nécessaire." });
+    }
+    const audioPath = path.join(meetingDir, originals[0]);
+    if (!fs.lstatSync(audioPath).isFile()) {
+      return res.status(409).json({ error: "Le fichier audio original n'est pas un fichier régulier." });
+    }
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    return res.sendFile(audioPath);
+  } catch (error) {
+    return res.status(500).json({ error: error.message || "Lecture audio impossible." });
+  }
+});
+
 app.post("/api/transcription/config/api-key", (req, res) => {
   const key = String(req.body?.apiKey || "").trim();
   if (!/^sk-/.test(key) || key.length < 20) return res.status(400).json({ error: "Cette clé API ne semble pas valide." });

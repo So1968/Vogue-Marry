@@ -17,7 +17,13 @@ if (!fs.existsSync(expectedFile)) throw new Error("Empreinte SHA-256 absente.");
 const expectedLine = fs.readFileSync(expectedFile, "utf8").trim();
 const expected = expectedLine.split(/\s+/u)[0];
 if (!/^[a-f0-9]{64}$/u.test(expected)) throw new Error("Empreinte invalide.");
-const actual = createHash("sha256").update(fs.readFileSync(file)).digest("hex");
+const actual = await new Promise((resolve, reject) => {
+  const hash = createHash("sha256");
+  const input = fs.createReadStream(file);
+  input.on("data", (chunk) => hash.update(chunk));
+  input.on("error", reject);
+  input.on("end", () => resolve(hash.digest("hex")));
+});
 if (actual !== expected) throw new Error("Archive altérée : SHA-256 différent.");
 const names = spawnSync("tar", ["-tzf", file], { encoding: "utf8" });
 if (names.status !== 0) throw new Error("Archive illisible.");
@@ -25,6 +31,22 @@ const entries = names.stdout.trim().split("\n").filter(Boolean);
 if (!entries.length || entries.some((name) => !name.startsWith("VOGUE-MERRY-DONNEES/") ||
   name.includes("..") || path.isAbsolute(name))) {
   throw new Error("Archive contient des chemins inattendus.");
+}
+// Une archive peut cacher un lien symbolique vers une cible extérieure.
+// Refuser les liens et les fichiers spéciaux avant toute extraction.
+const detailed = spawnSync("tar", ["-tvzf", file], { encoding: "utf8" });
+if (detailed.status !== 0) throw new Error("Inventaire détaillé de l'archive impossible.");
+for (const line of detailed.stdout.split("\n").filter(Boolean)) {
+  const kind = line[0];
+  if (kind !== "-" && kind !== "d") {
+    throw new Error("Archive dangereuse : lien ou type de fichier spécial interdit.");
+  }
+}
+for (const name of entries) {
+  const components = name.split("/");
+  if (components.some((part) => part === ".." || part === ".")) {
+    throw new Error("Archive dangereuse : chemin relatif interdit.");
+  }
 }
 const workspace = fs.mkdtempSync(path.join(os.tmpdir(), "vogue-restore-verify-"));
 try {

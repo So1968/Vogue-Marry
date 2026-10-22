@@ -71,3 +71,31 @@ test("audio : une capture incomplète ou session invalide est bloquée", async (
   await assert.rejects(sync({ ...session, count: 0 }), /Session audio invalide/);
   assert.equal(calls.finalized, 0);
 });
+
+test("audio : session simulée de trois heures, 2160 blocs et reprise sélective", async () => {
+  // 3 h à raison d'un bloc toutes les 5 secondes. Test logique, sans 3 h de micro.
+  const count = 3 * 60 * 60 / 5;
+  const many = Array.from({ length: count }, (_, index) => ({
+    index, blob: new Blob(["audio-fictif-" + index], { type: "audio/webm" })
+  }));
+  const remote = many.filter(({ index }) => index % 3 !== 0).map(({ index }) => index);
+  const { sync, calls } = harness({ local: many, remote });
+  const result = await sync({ ...session, count });
+  assert.equal(result.status, "ok");
+  assert.equal(calls.uploads.length, 720);
+  assert.equal(calls.uploads[0], 0);
+  assert.equal(calls.uploads.at(-1), 2157);
+  assert.equal(calls.finalized, 1);
+  assert.deepEqual(calls.cleared, [session.sessionId]);
+});
+
+test("audio : perte d'un bloc sur 2160 conserve la copie et interdit la finalisation", async () => {
+  const count = 2160;
+  const chunks = Array.from({ length: count }, (_, index) => ({
+    index, blob: new Blob([String(index)])
+  })).filter((chunk) => chunk.index !== 1500);
+  const { sync, calls } = harness({ local: chunks, failFinalize: true });
+  await assert.rejects(sync({ ...session, count }), /Confirmation indisponible/u);
+  assert.deepEqual(calls.cleared, []);
+  assert.deepEqual(calls.forgotten, []);
+});

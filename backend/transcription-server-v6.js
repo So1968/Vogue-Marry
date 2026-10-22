@@ -51,10 +51,11 @@ app.use((req, res, next) => {
   next();
 });
 
+// Refuse aussi les lectures déclenchées depuis une page Web étrangère.
+// Les clients non-navigateurs sans Origin ni Fetch Metadata restent compatibles.
 // Bloque les requêtes mutantes signalées comme intersites par le navigateur.
 // Les clients locaux sans Origin et sans Fetch Metadata restent compatibles.
 app.use((req, res, next) => {
-  if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
   const origin = req.headers.origin;
   const fetchSite = req.headers["sec-fetch-site"];
   if ((origin && !ALLOWED_ORIGINS.has(origin)) || fetchSite === "cross-site") {

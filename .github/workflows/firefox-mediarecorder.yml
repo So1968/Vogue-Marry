@@ -1,0 +1,26 @@
+name: Validation Firefox MediaRecorder
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  firefox-mediarecorder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+      - name: Installer Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Installer les dépendances
+        run: npm ci
+      - name: Installer Playwright Firefox sans modifier le lockfile
+        run: |
+          npm install --no-save --package-lock=false playwright
+          npx playwright install --with-deps firefox
+      - name: Vérifier MediaRecorder Firefox par tranches de 5 secondes
+        run: node scripts/validate-firefox-mediarecorder.mjs

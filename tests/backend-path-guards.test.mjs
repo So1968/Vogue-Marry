@@ -23,3 +23,36 @@ test("les chemins restent strictement à l'intérieur du répertoire autorisé",
   assert.throws(() => safePathInside(root, ".."), /Chemin de données invalide/u);
   assert.throws(() => safePathInside(root), /Chemin de données invalide/u);
 });
+
+test("refuse les traversées Unicode qui deviennent dangereuses après NFKC", () => {
+  for (const candidate of [
+    "\uFF0E\uFF0E",
+    "\uFF0E\uFF0E/secret",
+    "\uFF0E\uFF0E\uFF0Fsecret",
+    "ile\uFF0Fsecret",
+    "ile\uFF3Csecret",
+    "ile\u2024\u2024secret"
+  ]) {
+    assert.equal(safeSegment(candidate), "", JSON.stringify(candidate));
+  }
+});
+
+test("préserve les noms Unicode normaux et accents existants", () => {
+  for (const candidate of ["Réunion d’équipe", "Île-test", "équipage", "会議"]) {
+    assert.equal(safeSegment(candidate), candidate);
+  }
+});
+
+test("refuse les caractères de contrôle et de direction bidi", () => {
+  for (const candidate of [
+    "ile\u0001test",
+    "ile\u001Ftest",
+    "ile\u007Ftest",
+    "ile\u202Etest",
+    "ile\u202Atest",
+    "ile\u2066test",
+    "ile\u2069test"
+  ]) {
+    assert.equal(safeSegment(candidate), "", JSON.stringify(candidate));
+  }
+});

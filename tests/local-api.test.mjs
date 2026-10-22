@@ -187,6 +187,31 @@ test("API Longue-vue : refuse les liens symboliques vers des fichiers extérieur
   });
 });
 
+test("API Longue-vue : rejette les traversées Unicode et conserve les noms valides", async () => {
+  await withServer("backend/server.js", 8010, async (home) => {
+    const root = path.join(home, "VOGUE-MERRY-DONNEES", "01_PROJETS");
+    const island = path.join(root, "île_valide");
+    fs.mkdirSync(island, { recursive: true });
+    fs.writeFileSync(path.join(island, "café.md"), "# Texte fictif", "utf8");
+
+    const base = "http://127.0.0.1:8010/api/search/read?relativePath=";
+    const good = await fetch(base + encodeURIComponent("île_valide/café.md"));
+    assert.equal(good.status, 200);
+    assert.match((await good.json()).content, /Texte fictif/u);
+
+    for (const dangerous of [
+      "île_valide/\uFF0E\uFF0E/café.md",
+      "île_valide/\uFF0E\uFF0E\uFF0Fcafé.md",
+      "île_valide/\u202Esecret.md",
+      "île_valide/\u2066secret.md",
+      "île_valide/\u0001secret.md"
+    ]) {
+      const response = await fetch(base + encodeURIComponent(dangerous));
+      assert.equal(response.status, 400, JSON.stringify(dangerous));
+    }
+  });
+});
+
 test("API mémoire : crée une escale, rattache un audio et la retrouve", async () => {
   await withServer("backend/server.js", 8010, async () => {
     const requestOptions = {

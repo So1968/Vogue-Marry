@@ -1582,7 +1582,13 @@ app.get("/api/search/read", (req, res) => {
     if (requestedProject && !projectSlug) throw new Error("Île/projet invalide.");
 
     const normalizedRelativePath = relativePath.replaceAll("\\", path.sep);
-    const filePath = safePathInside(PROJECTS_ROOT, normalizedRelativePath);
+    // Les composants Unicode doivent être contrôlés avant résolution du chemin.
+    // Conserver l'orthographe historique des dossiers autorisés.
+    const relativeSegments = normalizedRelativePath.split(path.sep);
+    if (relativeSegments.some((segment) => !safeSegment(segment))) {
+      throw new Error("Chemin de source invalide.");
+    }
+    const filePath = safePathInside(PROJECTS_ROOT, ...relativeSegments);
     const relativeProjectPath = path.relative(PROJECTS_ROOT, filePath).split(path.sep);
     if (projectSlug && relativeProjectPath[0] !== projectSlug) throw new Error("La source n’appartient pas à cette île.");
     if (relativeProjectPath.includes("99_versions")) throw new Error("Les versions historiques ne sont pas ouvertes depuis la Longue-vue.");

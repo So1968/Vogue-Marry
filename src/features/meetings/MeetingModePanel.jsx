@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import MeetingMode from "../../components/MeetingMode.jsx";
 import { exportMeeting, saveMeetingMarkers } from "../../lib/local-api.js";
-import { keepAudioChunk, rememberAudioSession, recoverAudioSession } from "../../lib/audio-chunk-queue.js";
+import { keepAudioChunk, pendingAudioChunks, rememberAudioSession, recoverAudioSession } from "../../lib/audio-chunk-queue.js";
+import { preparePartialAudioExport } from "../../lib/audio-partial-recovery.js";
 import { syncAudioSession } from "../../lib/audio-chunk-sync.js";
 import { keepLocalMarkers, recoverLocalMarkers, clearLocalMarkers } from "../../lib/meeting-marker-backup.js";
 
@@ -226,6 +227,30 @@ export default function MeetingModePanel({ projects, onSaved }) {
     }
   }
 
+  async function exportEmergencyAudio() {
+    if (!recoverableSession?.sessionId || saving || isRecording) return;
+    setError("");
+    try {
+      const chunks = await pendingAudioChunks(recoverableSession.sessionId);
+      const { blob, extension, count } = preparePartialAudioExport(chunks);
+      const url = URL.createObjectURL(blob);
+      try {
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `vogue-mary-secours-${recoverableSession.sessionId}.${extension}`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      } finally {
+        // Laisser au navigateur le temps d'initialiser le téléchargement.
+        setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      }
+      setNotice(`Export de secours demandé (${count} fragments). Il peut être incomplet ou illisible ; les blocs locaux sont conservés.`);
+    } catch (exportError) {
+      setError("Export de secours impossible : " + exportError.message);
+    }
+  }
+
   function stopRecording() {
     if (!recorderRef.current) return;
     setSaving(true);
@@ -306,6 +331,7 @@ export default function MeetingModePanel({ projects, onSaved }) {
           Une sauvegarde audio est en attente. Ne videz pas les données du navigateur.
           <button type="button" disabled={saving} onClick={retryMarkerSave}>Sauvegarder les marqueurs</button>
           <button type="button" disabled={saving} onClick={retryAudioSave}>Reprendre la sauvegarde audio</button>
+          <button type="button" disabled={saving} onClick={exportEmergencyAudio}>Exporter les fragments audio (secours)</button>
         </div>
       ) : null}
       {notice ? <p className="meeting-notice">{notice}</p> : null}

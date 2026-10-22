@@ -191,6 +191,33 @@ try {
     mimeType: recorded.mimeType
   }));
 
+  // Deux onglets ne peuvent pas détenir simultanément le verrou audio.
+  const firstTab = await context.newPage();
+  const secondTab = await context.newPage();
+  await Promise.all([firstTab.goto(origin), secondTab.goto(origin)]);
+  const lockSupported = await firstTab.evaluate(() => Boolean(navigator.locks?.request));
+  if (!lockSupported) fail("Web Locks indisponible dans Firefox : protection inter-onglets impossible.");
+  await firstTab.evaluate(() => {
+    window.__heldAudioLock = new Promise((resolve) => { window.__releaseAudioLock = resolve; });
+    navigator.locks.request("vogue-mary-audio-recording", async () => {
+      window.__audioLockEntered = true;
+      await window.__heldAudioLock;
+    });
+  });
+  await firstTab.waitForFunction(() => window.__audioLockEntered === true);
+  const secondGranted = await secondTab.evaluate(() =>
+    navigator.locks.request("vogue-mary-audio-recording", { ifAvailable: true }, (lock) => Boolean(lock))
+  );
+  if (secondGranted) fail("Un second onglet a acquis le verrou pendant une capture active.");
+  await firstTab.evaluate(() => window.__releaseAudioLock());
+  await firstTab.close();
+  const availableAfterRelease = await secondTab.evaluate(() =>
+    navigator.locks.request("vogue-mary-audio-recording", { ifAvailable: true }, (lock) => Boolean(lock))
+  );
+  if (!availableAfterRelease) fail("Le verrou audio n'a pas été relâché après l'arrêt.");
+  await secondTab.close();
+  console.log("RESULTAT_VERROU_AUDIO", JSON.stringify({ secondGranted, availableAfterRelease }));
+
   console.log(JSON.stringify(results, null, 2));
 } finally {
   await browser.close();

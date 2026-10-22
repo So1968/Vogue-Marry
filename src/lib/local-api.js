@@ -134,3 +134,48 @@ export function validateMeeting({ projectSlug, meetingDirName }) {
     body: JSON.stringify({ projectSlug, meetingDirName })
   });
 }
+
+/**
+ * API de blocs audio, volontairement distincte du flux historique.
+ * L'enregistrement navigateur ne basculera sur ce protocole qu'après
+ * validation de sa file locale persistante et de la reprise.
+ */
+function audioChunkExtension(blob) {
+  const type = String(blob?.type || "").split(";")[0].trim().toLowerCase();
+  if (type === "audio/ogg" || type === "application/ogg") return ".ogg";
+  if (type === "audio/mp4") return ".m4a";
+  if (type === "video/mp4") return ".mp4";
+  if (type === "audio/mpeg") return ".mp3";
+  if (type === "audio/wav" || type === "audio/x-wav") return ".wav";
+  return ".webm";
+}
+
+export function uploadMeetingAudioChunk({ projectName, meetingDirName, index, blob }) {
+  const form = new FormData();
+  form.append("projectName", projectName);
+  form.append("meetingDirName", meetingDirName);
+  form.append("index", String(index));
+  form.append("audio", blob, `chunk-${index}${audioChunkExtension(blob)}`);
+  return localApi("/api/meetings/audio-chunk", { method: "POST", body: form });
+}
+
+export function getMeetingAudioChunksStatus({ projectName, meetingDirName }) {
+  return localApi("/api/meetings/audio-chunks-status", {
+    method: "POST",
+    body: JSON.stringify({ projectName, meetingDirName })
+  });
+}
+
+export function finalizeMeetingAudioChunks({ projectName, meetingDirName, count }) {
+  return localApi("/api/meetings/audio-chunks-finalize", {
+    method: "POST",
+    body: JSON.stringify({ projectName, meetingDirName, count })
+  });
+}
+
+export function saveMeetingMarkers({ projectSlug, meetingDirName, markers }) {
+  return localApi("/api/meetings/save-markers", {
+    method: "POST",
+    body: JSON.stringify({ projectSlug, meetingDirName, markers })
+  });
+}

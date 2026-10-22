@@ -101,6 +101,11 @@ export function recoverAudioSession() {
     return null;
   }
 }
-export function forgetAudioSession() {
-  localStorage.removeItem(SESSION_STORE);
+export function forgetAudioSession(sessionId = "") {
+  if (!sessionId) {
+    localStorage.removeItem(SESSION_STORE);
+    return;
+  }
+  const active = recoverAudioSession();
+  if (active?.sessionId === sessionId) localStorage.removeItem(SESSION_STORE);
 }

@@ -31,6 +31,7 @@ export default function MeetingModePanel({ projects, onSaved }) {
   const streamRef = useRef(null);
   const writesRef = useRef(Promise.resolve());
   const uploadsRef = useRef(Promise.resolve());
+  const progressiveUploadFailedRef = useRef(false);
   const chunkWriteErrorRef = useRef(null);
   const markerWritesRef = useRef(Promise.resolve());
   const markerErrorRef = useRef(null);
@@ -154,6 +155,7 @@ export default function MeetingModePanel({ projects, onSaved }) {
       setRecoverableSession(session);
       writesRef.current = Promise.resolve();
       uploadsRef.current = Promise.resolve();
+      progressiveUploadFailedRef.current = false;
       chunkWriteErrorRef.current = null;
       recorderRef.current = recorder;
       recorder.ondataavailable = (event) => {
@@ -169,6 +171,7 @@ export default function MeetingModePanel({ projects, onSaved }) {
             // Les envois sont ordonnés et une panne réseau ne stoppe pas la capture.
             uploadsRef.current = uploadsRef.current
               .then(async () => {
+                if (progressiveUploadFailedRef.current) return;
                 const persisted = await getAudioChunk(session.sessionId, index);
                 if (!persisted?.blob) throw new Error("Bloc audio local introuvable.");
                 return uploadMeetingAudioChunk({
@@ -179,7 +182,9 @@ export default function MeetingModePanel({ projects, onSaved }) {
                 });
               })
               .catch(() => {
-                // La reprise finale consultera les blocs réellement reçus par le serveur.
+                // Arrêter les tentatives pendant cette capture en cas de panne persistante.
+                // Tous les fragments restent dans IndexedDB pour syncAudioSession.
+                progressiveUploadFailedRef.current = true;
               });
           })
           .catch((writeError) => {

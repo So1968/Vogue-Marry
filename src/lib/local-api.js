@@ -156,7 +156,7 @@ export function uploadMeetingAudioChunk({ projectName, meetingDirName, index, bl
   form.append("meetingDirName", meetingDirName);
   form.append("index", String(index));
   form.append("audio", blob, `chunk-${index}${audioChunkExtension(blob)}`);
-  return localApi("/api/meetings/audio-chunk", { method: "POST", body: form });
+  return localApi("/api/meetings/audio-chunk", { method: "POST", body: form, signal: AbortSignal.timeout(15000) });
 }
 
 export function getMeetingAudioChunksStatus({ projectName, meetingDirName }) {

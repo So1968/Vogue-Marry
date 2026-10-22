@@ -6,7 +6,6 @@ export async function syncAudioSession(session) {
   if (!session.finalizedCapture) throw new Error("Capture incomplète : les fragments restent conservés.");
   const { sessionId, projectName, meetingDirName } = session;
   const pending = await pendingAudioChunks(sessionId);
-  if (!pending.length) throw new Error("Aucun fragment audio disponible localement.");
   const state = await getMeetingAudioChunksStatus({ projectName, meetingDirName });
   const remote = new Set(state.received || []);
   for (const chunk of pending) {
@@ -19,6 +18,6 @@ export async function syncAudioSession(session) {
   });
   if (!["ok", "already-finalized"].includes(result.status)) throw new Error("La finalisation audio n'est pas confirmée.");
   await clearFinalizedAudioChunks(sessionId);
-  forgetAudioSession();
+  forgetAudioSession(sessionId);
   return result;
 }

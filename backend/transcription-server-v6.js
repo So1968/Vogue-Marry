@@ -1114,7 +1114,7 @@ app.get("/api/transcription/escales/:projectSlug/:meetingDirName/audio", (req, r
   try {
     const meetingDir = path.dirname(dataPath);
     const originals = fs.readdirSync(meetingDir)
-      .filter((name) => /^audio_original\\.(webm|ogg|wav|mp3|m4a|mp4|flac)$/iu.test(name));
+      .filter((name) => /^audio_original[.](webm|ogg|wav|mp3|m4a|mp4|flac)$/iu.test(name));
     if (originals.length !== 1) {
       return res.status(409).json({ error: "Audio original absent ou ambigu. Vérification nécessaire." });
     }

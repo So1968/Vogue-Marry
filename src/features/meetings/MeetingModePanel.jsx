@@ -26,6 +26,7 @@ export default function MeetingModePanel({ projects, onSaved }) {
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const recorderRef = useRef(null);
+  const startingRef = useRef(false);
   const streamRef = useRef(null);
   const writesRef = useRef(Promise.resolve());
   const uploadsRef = useRef(Promise.resolve());
@@ -58,15 +59,29 @@ export default function MeetingModePanel({ projects, onSaved }) {
     return () => window.removeEventListener("storage", refreshRecoverableSession);
   }, []);
 
-  useEffect(() => () => {
-    mountedRef.current = false;
-    if (recorderRef.current?.state === "recording") recorderRef.current.stop();
-    streamRef.current?.getTracks().forEach((track) => track.stop());
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      if (recorderRef.current?.state === "recording") recorderRef.current.stop();
+      streamRef.current?.getTracks().forEach((track) => track.stop());
+    };
   }, []);
 
   const selectedProject = projects.find((project) => project.slug === projectSlug) || null;
 
   async function startRecording() {
+    // Empêcher deux clics rapides de créer deux escales avec un même micro.
+    if (startingRef.current || recorderRef.current) return;
+    startingRef.current = true;
+    try {
+      await startRecordingOnce();
+    } finally {
+      startingRef.current = false;
+    }
+  }
+
+  async function startRecordingOnce() {
     setError("");
     setNotice("");
     if (!selectedProject) {

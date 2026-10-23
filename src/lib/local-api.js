@@ -1,3 +1,4 @@
+import { explainLocalApiFailure } from "./local-api-errors.js";
 const API_BASE = (import.meta.env.VITE_VOGUE_MARRY_API || "http://127.0.0.1:8010").replace(/\/+$/u, "");
 
 export async function localApi(path, options = {}) {
@@ -6,7 +7,12 @@ export async function localApi(path, options = {}) {
     headers.set("Content-Type", "application/json");
   }
 
-  const response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  let response;
+  try {
+    response = await fetch(`${API_BASE}${path}`, { ...options, headers });
+  } catch (error) {
+    throw explainLocalApiFailure(error);
+  }
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(payload.error || `Erreur de l'API locale (${response.status}).`);
   return payload;

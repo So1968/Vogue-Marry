@@ -1,3 +1,4 @@
+import { audioFileDigest, appendAudioFile, audioMatchesChunks } from "./lib/audio-files.js";
 import { browserAccessGuard, LOCAL_ORIGINS, loadInternalToken, INTERNAL_TOKEN_HEADER } from "./lib/local-access.js";
 import express from "express";
 import cors from "cors";
@@ -1142,7 +1143,10 @@ app.post("/api/meetings/audio-chunks-status", (req, res) => {
         .map((name) => Number(name.slice(6, 12))).sort((a, b) => a - b)
       : [];
     const manifest = fs.existsSync(chunksDir) ? readAudioChunkManifest(chunksDir) : null;
-    return res.json({ status: "ok", received, ...(manifest || {}) });
+    const chunks = received.map((index) => ({
+      index, ...audioFileDigest(path.join(chunksDir, `chunk_${String(index).padStart(6, "0")}.part`))
+    }));
+    return res.json({ status: "ok", received, chunks, ...(manifest || {}) });
   } catch (error) {
     return res.status(400).json({ error: error.message || "Impossible de lister les blocs audio." });
   }
@@ -1186,24 +1190,10 @@ app.post("/api/meetings/audio-chunks-finalize", (req, res) => {
       }
       // Accusé de réception perdu : une relance identique est sûre uniquement
       // si l'original correspond exactement à la concaténation des blocs.
-      const existing = fs.readFileSync(audioPath);
-      const totalBytes = paths.reduce((sum, filePath) => sum + fs.statSync(filePath).size, 0);
-      if (existing.length === totalBytes) {
-        let offset = 0;
-        let identical = true;
-        for (const filePath of paths) {
-          const block = fs.readFileSync(filePath);
-          if (!existing.subarray(offset, offset + block.length).equals(block)) {
-            identical = false;
-            break;
-          }
-          offset += block.length;
-        }
-        if (identical) {
-          return res.status(200).json({
-            status: "already-finalized", audioFileName, blocks: count, mimeType: manifest.mimeType
-          });
-        }
+      if (audioMatchesChunks(audioPath, paths)) {
+        return res.status(200).json({
+          status: "already-finalized", audioFileName, blocks: count, mimeType: manifest.mimeType
+        });
       }
       return res.status(409).json({ error: "Un audio original différent existe déjà. Il ne sera pas remplacé." });
     }
@@ -1212,7 +1202,7 @@ app.post("/api/meetings/audio-chunks-finalize", (req, res) => {
     try {
       const fd = fs.openSync(temporaryPath, "wx");
       try {
-        for (const filePath of paths) fs.writeFileSync(fd, fs.readFileSync(filePath));
+        for (const filePath of paths) appendAudioFile(fd, filePath);
         fs.fsyncSync(fd);
       } finally {
         fs.closeSync(fd);

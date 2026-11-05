@@ -30,9 +30,9 @@ test("8010 est la porte unique de l'interface", () => {
 test("Multer reste verrouillé sur la version consolidée", () => {
   const packageJson = JSON.parse(read("package.json"));
   const packageLock = JSON.parse(read("package-lock.json"));
-  assert.equal(packageJson.dependencies?.multer, "2.4.0");
-  assert.equal(packageLock.packages?.[""]?.dependencies?.multer, "2.4.0");
-  assert.equal(packageLock.packages?.["node_modules/multer"]?.version, "2.4.0");
+  assert.equal(packageJson.dependencies?.multer, "2.5.0");
+  assert.equal(packageLock.packages?.[""]?.dependencies?.multer, "2.5.0");
+  assert.equal(packageLock.packages?.["node_modules/multer"]?.version, "2.5.0");
 });
 
 test("les dépendances frontend critiques ne reviennent pas à latest", () => {

@@ -43,6 +43,8 @@ React + Vite.
 
 Les services locaux écoutent uniquement sur `127.0.0.1`. Le port 8012 et les anciens moteurs V1 à V5 ont été retirés du code actif.
 
+Le moteur 8011 exige un secret interne local ; l’interface et les diagnostics passent par 8010. Voir [les contrôles d’accès et le renouvellement du secret](docs/SECURITE_API_LOCALE.md).
+
 ## Démarrage
 
 ```bash

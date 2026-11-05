@@ -1,3 +1,4 @@
+import { loadInternalToken, INTERNAL_TOKEN_HEADER } from "../backend/lib/local-access.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -5,6 +6,14 @@ import http from "node:http";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+let engineToken;
+// Les tests du moteur jouent le rôle de la façade avec un secret synthétique local.
+function fetch(url, options = {}) {
+  const headers = new Headers(options.headers);
+  if (new URL(url).port !== "8010") headers.set(INTERNAL_TOKEN_HEADER, engineToken);
+  return globalThis.fetch(url, { ...options, headers });
+}
 
 const ROOT = process.cwd();
 
@@ -28,6 +37,7 @@ async function waitFor(url, attempts = 40) {
 
 async function withServer(script, port, callback, healthPath = port === 8010 ? "health" : "transcription/health") {
   const home = makeHome();
+  engineToken = loadInternalToken(path.join(home, ".config", "vogue-merry"));
   const child = spawn(process.execPath, [script], {
     cwd: ROOT,
     env: { ...process.env, HOME: home },
@@ -38,7 +48,7 @@ async function withServer(script, port, callback, healthPath = port === 8010 ? "
   child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
 
   try {
-    await waitFor(`http://127.0.0.1:${port}/api/${healthPath}`);
+    await waitFor(`http://127.0.0.1:${port}/api/${port === 8010 ? healthPath : "transcription/escales"}`);
     await callback(home);
   } catch (error) {
     if (stderr.trim()) error.message += `\nServeur : ${stderr.trim()}`;
@@ -51,6 +61,7 @@ async function withServer(script, port, callback, healthPath = port === 8010 ? "
 
 async function withUnifiedServer(callback) {
   const home = makeHome();
+  engineToken = loadInternalToken(path.join(home, ".config", "vogue-merry"));
   const env = { ...process.env, HOME: home, VOGUE_TRANSCRIPTION_PORT: "8011" };
   const children = [
     spawn(process.execPath, ["backend/transcription-server-v6.js"], {
@@ -72,7 +83,7 @@ async function withUnifiedServer(callback) {
   });
 
   try {
-    await waitFor("http://127.0.0.1:8010/api/transcription/health");
+    await waitFor("http://127.0.0.1:8010/api/transcription/escales");
     await callback(home);
   } catch (error) {
     const details = Array.from(stderr.values()).filter(Boolean).join("\n");
@@ -119,7 +130,7 @@ test("les API locales refusent un Host étranger", async () => {
     await withServer(script, port, async () => {
       const url = `http://127.0.0.1:${port}/api/${healthPath}`;
       const requestWithHost = (host) => new Promise((resolve, reject) => {
-        const request = http.get(url, { headers: { host } }, (response) => {
+        const request = http.get(url, { headers: { host, [INTERNAL_TOKEN_HEADER]: engineToken } }, (response) => {
           response.resume();
           response.on("end", () => resolve(response.statusCode));
         });
@@ -812,4 +823,56 @@ test("API unifiée : confirme et persiste une correspondance", async () => {
     assert.equal(meeting.hasTranscription, true);
     assert.equal(meeting.status, "Transcription à relire");
   });
+});
+
+test("8011 refuse les appels directs et 8010 conserve le secret côté serveur", async () => {
+  await withUnifiedServer(async (home) => {
+    const tokenPath = path.join(home, ".config", "vogue-merry", "internal_api_token");
+    assert.equal(fs.statSync(tokenPath).mode & 0o777, 0o600);
+    for (const route of ["health", "escales", "config", "job_fictif"]) {
+      for (const headers of [{}, { [INTERNAL_TOKEN_HEADER]: "faux-secret" }]) {
+        const denied = await globalThis.fetch(`http://127.0.0.1:8011/api/transcription/${route}`, { headers });
+        assert.equal(denied.status, 403);
+        assert.deepEqual(await denied.json(), { error: "Accès réservé à la façade locale." });
+      }
+    }
+    const directWrite = await globalThis.fetch("http://127.0.0.1:8011/api/transcription/config/hf-token", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: "JETON_FICTIF_NE_PAS_ENREGISTRER" })
+    });
+    assert.equal(directWrite.status, 403);
+    assert.equal(fs.existsSync(path.join(home, ".config", "vogue-merry", "huggingface_token")), false);
+    const gateway = await fetch("http://127.0.0.1:8010/api/transcription/health", {
+      headers: { [INTERNAL_TOKEN_HEADER]: "tentative-de-substitution" }
+    });
+    assert.equal(gateway.status, 200);
+    assert.equal(gateway.headers.get(INTERNAL_TOKEN_HEADER), null);
+    assert.ok(!(await gateway.text()).includes(engineToken));
+  });
+});
+
+test("lectures navigateur : refuse les autres ports locaux et préserve les médias de l'interface", async () => {
+  for (const [script, port, healthPath] of [
+    ["backend/server.js", 8010, "health"],
+    ["backend/transcription-server-v6.js", 8011, "transcription/health"]
+  ]) {
+    await withServer(script, port, async () => {
+      const url = `http://127.0.0.1:${port}/api/${healthPath}`;
+      for (const headers of [
+        { "Sec-Fetch-Site": "same-site" },
+        { "Sec-Fetch-Site": "none" },
+        { "Sec-Fetch-Site": "same-site", Referer: "http://localhost:9999/page" },
+        { "Sec-Fetch-Site": "cross-site", Referer: "http://localhost:5173/" },
+        { Origin: "null" }
+      ]) assert.equal((await fetch(url, { headers })).status, 403, JSON.stringify(headers));
+      for (const origin of ["http://localhost:5173", "http://127.0.0.1:5173"]) {
+        const media = await fetch(url, {
+          headers: { "Sec-Fetch-Site": "same-site", "Sec-Fetch-Dest": "audio", Referer: `${origin}/` }
+        });
+        assert.equal(media.status, 200);
+        assert.equal(media.headers.get("cache-control"), "no-store");
+        assert.equal(media.headers.get("x-content-type-options"), "nosniff");
+      }
+    }, healthPath);
+  }
 });

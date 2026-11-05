@@ -1,3 +1,4 @@
+import { browserAccessGuard, LOCAL_ORIGINS, loadInternalToken, INTERNAL_TOKEN_HEADER } from "./lib/local-access.js";
 import express from "express";
 import cors from "cors";
 import fs from "fs";
@@ -37,10 +38,8 @@ const HOME = os.homedir();
 const DATA_ROOT = path.join(HOME, "VOGUE-MERRY-DONNEES");
 const PROJECTS_ROOT = path.join(DATA_ROOT, "01_PROJETS");
 const WATER_SEVEN_ROOT = path.join(DATA_ROOT, "00_WATER_SEVEN_PORT_ENTREE");
-const ALLOWED_ORIGINS = new Set([
-  "http://127.0.0.1:5173",
-  "http://localhost:5173"
-]);
+const ALLOWED_ORIGINS = LOCAL_ORIGINS;
+const internalToken = loadInternalToken(path.join(HOME, ".config", "vogue-merry"));
 const DOCUMENT_EXTENSIONS = new Set([
   ".csv",
   ".doc",
@@ -76,18 +75,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Refuse aussi les lectures déclenchées depuis une page Web étrangère.
-// Les clients non-navigateurs sans Origin ni Fetch Metadata restent compatibles.
-// Bloque les requêtes mutantes signalées comme intersites par le navigateur.
-// Les clients locaux sans Origin et sans Fetch Metadata restent compatibles.
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  const fetchSite = req.headers["sec-fetch-site"];
-  if ((origin && !ALLOWED_ORIGINS.has(origin)) || fetchSite === "cross-site") {
-    return res.status(403).json({ error: "Modification depuis une origine non autorisée." });
-  }
-  next();
-});
+app.use(browserAccessGuard);
 
 app.use(cors({
   origin(origin, callback) {
@@ -101,6 +89,8 @@ app.use(cors({
 function proxyTranscriptionRequest(req, res) {
   const headers = { ...req.headers, host: `${TRANSCRIPTION_HOST}:${TRANSCRIPTION_PORT}` };
   HOP_BY_HOP_HEADERS.forEach((header) => delete headers[header]);
+  // Remplacer tout en-tête fourni par le client ; ne jamais lui rendre ce secret.
+  headers[INTERNAL_TOKEN_HEADER] = internalToken;
 
   const proxy = http.request({
     hostname: TRANSCRIPTION_HOST,

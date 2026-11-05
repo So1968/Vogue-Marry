@@ -1,3 +1,4 @@
+import { loadInternalToken, INTERNAL_TOKEN_HEADER } from "../backend/lib/local-access.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -5,6 +6,14 @@ import os from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
+
+let engineToken;
+// Les tests du moteur jouent le rôle de la façade avec un secret synthétique local.
+function fetch(url, options = {}) {
+  const headers = new Headers(options.headers);
+  if (new URL(url).port !== "8010") headers.set(INTERNAL_TOKEN_HEADER, engineToken);
+  return globalThis.fetch(url, { ...options, headers });
+}
 
 const PORT = 18012;
 const API = `http://127.0.0.1:${PORT}`;
@@ -20,6 +29,7 @@ test("transcription : récupérer uniquement l'audio original d'une escale connu
   }));
   const source = "CONTENU_FICTIF_SANS_DONNEES_PERSONNELLES";
   fs.writeFileSync(path.join(meeting, "audio_original.webm"), source);
+  engineToken = loadInternalToken(path.join(home, ".config", "vogue-merry"));
   const child = spawn(process.execPath, ["backend/transcription-server-v6.js"], {
     cwd: process.cwd(),
     env: { ...process.env, HOME: home, VOGUE_TRANSCRIPTION_PORT: String(PORT) },
@@ -33,7 +43,7 @@ test("transcription : récupérer uniquement l'audio original d'une escale connu
     for (let i = 0; i < 90; i++) {
       if (child.exitCode !== null) break;
       try {
-        const response = await fetch(API + "/api/transcription/health", { signal: AbortSignal.timeout(500) });
+        const response = await fetch(API + "/api/transcription/escales", { signal: AbortSignal.timeout(500) });
         if (response.ok) { ready = true; break; }
       } catch { /* démarrage */ }
       await delay(100);

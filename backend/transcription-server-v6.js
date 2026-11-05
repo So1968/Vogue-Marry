@@ -1,3 +1,4 @@
+import { browserAccessGuard, LOCAL_ORIGINS, loadInternalToken, internalAccessGuard } from "./lib/local-access.js";
 import express from "express";
 import cors from "cors";
 import multer from "multer";
@@ -32,10 +33,8 @@ const API_KEY_FILE = path.join(CONFIG_DIR, "openai_api_key");
 const HF_TOKEN_FILE = path.join(CONFIG_DIR, "huggingface_token");
 const OPENAI_URL = "https://api.openai.com/v1/audio/transcriptions";
 const GPT_COST_PER_MINUTE_USD = 0.0045;
-const ALLOWED_ORIGINS = new Set([
-  "http://127.0.0.1:5173",
-  "http://localhost:5173"
-]);
+const ALLOWED_ORIGINS = LOCAL_ORIGINS;
+const internalToken = loadInternalToken(path.join(HOME, ".config", "vogue-merry"));
 
 const DEFAULT_CONTEXT = [
   "Réunion professionnelle en français.",
@@ -55,18 +54,8 @@ app.use((req, res, next) => {
   next();
 });
 
-// Refuse aussi les lectures déclenchées depuis une page Web étrangère.
-// Les clients non-navigateurs sans Origin ni Fetch Metadata restent compatibles.
-// Bloque les requêtes mutantes signalées comme intersites par le navigateur.
-// Les clients locaux sans Origin et sans Fetch Metadata restent compatibles.
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  const fetchSite = req.headers["sec-fetch-site"];
-  if ((origin && !ALLOWED_ORIGINS.has(origin)) || fetchSite === "cross-site") {
-    return res.status(403).json({ error: "Modification depuis une origine non autorisée." });
-  }
-  next();
-});
+app.use(browserAccessGuard);
+app.use(internalAccessGuard(internalToken));
 
 app.use(cors({
   origin(origin, callback) {

@@ -27,6 +27,6 @@ const report = {
   localPythonEnvironment: fs.existsSync(venv),
   dataRootPresent: fs.existsSync(root),
   api: await endpoint("http://127.0.0.1:8010/api/health"),
-  transcription: await endpoint("http://127.0.0.1:8011/api/transcription/health")
+  transcription: await endpoint("http://127.0.0.1:8010/api/transcription/health")
 };
 console.log(JSON.stringify(report, null, 2));

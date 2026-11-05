@@ -4,6 +4,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { randomBytes, scryptSync, createCipheriv, createDecipheriv } from "node:crypto";
 import { pipeline } from "node:stream/promises";
+import { Readable } from "node:stream";
+import { publishBackup } from "./lib/backup-safety.mjs";
 
 const [operation, fileArg] = process.argv.slice(2);
 const password = process.env.VOGUE_BACKUP_PASSPHRASE || "";
@@ -14,8 +16,8 @@ if (!fs.existsSync(file) || !fs.statSync(file).isFile()) throw new Error("Fichie
 const magic = Buffer.from("VMBACK01");
 const output = operation === "encrypt" ? file + ".enc" : file.replace(/\.enc$/u, "") + ".decrypted";
 if (output === file || fs.existsSync(output)) throw new Error("Destination existante ou invalide : refus d'écrasement.");
-const tmp = output + ".partial";
-if (fs.existsSync(tmp)) throw new Error("Fichier temporaire existant : intervention nécessaire.");
+const workspace = fs.mkdtempSync(path.join(path.dirname(output), ".vogue-crypt-"));
+const tmp = path.join(workspace, "payload.partial");
 try {
   if (operation === "encrypt") {
     const salt = randomBytes(16), iv = randomBytes(12);
@@ -40,9 +42,10 @@ try {
     const decipher = createDecipheriv("aes-256-gcm", key, header.subarray(24, 36));
     decipher.setAAD(header);
     decipher.setAuthTag(tag);
-    await pipeline(fs.createReadStream(file, { start: 36, end: size - 17 }), decipher,
+    const ciphertext = size === 52 ? Readable.from([]) : fs.createReadStream(file, { start: 36, end: size - 17 });
+    await pipeline(ciphertext, decipher,
       fs.createWriteStream(tmp, { flags: "wx", mode: 0o600 }));
   }
-  fs.renameSync(tmp, output);
+  publishBackup(tmp, output);
   console.log(JSON.stringify({ status: operation === "encrypt" ? "encrypted" : "decrypted", file: output, sourcePreserved: true }));
-} finally { if (fs.existsSync(tmp)) fs.unlinkSync(tmp); }
+} finally { fs.rmSync(workspace, { recursive: true, force: true }); }

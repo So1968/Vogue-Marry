@@ -80,3 +80,33 @@ inspection. Aucun de ces scripts n'écrase les données utilisateur.
   lorsque tous les services sont arrêtés.
 - Les scripts ne chiffrent pas les fichiers de travail du dossier de données.
 - Le mode d'accès local à l'API n'est pas une authentification multi-utilisateur.
+
+## Garanties et reprise après interruption
+
+Les destinations sont vérifiées après résolution des liens symboliques, avant
+création de répertoires. Une sauvegarde ou une restauration ne peut pas entrer
+dans les données actives par un alias de chemin. Les archives temporaires en
+clair sont privées dès leur création. Le calcul SHA-256 se fait en flux pour
+ne pas charger une longue réunion entière en mémoire.
+
+Les sources contenant un lien symbolique ou un fichier spécial sont refusées
+avant archivage : elles ne seraient pas acceptées par le vérificateur de
+restauration. Ne pas supprimer ces sources pour contourner le refus ; examiner
+le lien et préparer une copie régulière hors des données actives. Les liens
+physiques entre fichiers réguliers sont archivés comme des copies indépendantes.
+
+La publication des archives et des résultats cryptographiques refuse une
+destination existante, même si elle apparaît pendant l'opération. Une erreur
+ne publie pas un déchiffrement non authentifié. Les sources et sauvegardes
+précédentes restent conservées.
+
+Après une interruption brutale, une sortie `.partial` ou un répertoire privé
+`.vogue-crypt-*` peut subsister. Ce n'est pas une sauvegarde validée. Conserver
+les sources, arrêter les services, relancer vers une nouvelle destination et
+contrôler la récupération. Ne nettoyer les restes qu'après cette vérification.
+Une archive claire sans son `.sha256` ne doit pas être déclarée vérifiée.
+
+La cohérence d'un instantané multi-fichiers pendant des écritures simultanées
+n'est pas garantie : arrêter les services avant une sauvegarde de référence.
+Le statut de création d'une archive chiffrée ne constitue pas à lui seul une
+recette de restauration ; vérifier le déchiffrement et les contenus récupérés.

@@ -1,6 +1,6 @@
 # Rangement Git — audit du 6 novembre 2026
 
-L'inventaire a été vérifié sur les références GitHub et les PR, sans suppression.
+L'inventaire a été vérifié sur les références GitHub et les PR, sans suppression distante.
 Il révèle **88 branches distantes** :
 
 - **77** correspondent exactement à la tête d'une PR fusionnée dans main ;
@@ -10,8 +10,10 @@ Il révèle **88 branches distantes** :
 
 Les **79 candidates au nettoyage** sont donc identifiées par une preuve
 d'intégration, pas seulement par leur nom ou leur ancienneté. Aucune n'a été
-supprimée : l'accès d'écriture GitHub renvoie HTTP 403, et ce rapport constitue
-un inventaire, pas une autorisation de suppression. Recontrôler les têtes et les
+supprimée : malgré l'autorisation donnée par le propriétaire, la suppression
+atomique a été refusée par GitHub avec HTTP 403. Les têtes distantes ont été
+revérifiées et sont restées identiques. Le connecteur refuse aussi la création
+de branche avec Resource not accessible by integration. Recontrôler les têtes et les
 PR juste avant tout nettoyage ; ne jamais supprimer une branche qui a avancé
 ou porte une nouvelle PR. Une suppression doit utiliser la tête attendue comme
 condition pour refuser une modification concurrente.
@@ -28,13 +30,23 @@ condition pour refuser une modification concurrente.
 
 ## Travail local en attente de publication
 
-Les consolidations de cette mission forment une suite linéaire depuis main ;
-les références par lot sont des repères pour de futures PR, pas des développements
-concurrents. Elles sont conservées tant que la publication et l'intégration ne
-sont pas possibles. La branche de consolidation active est `codex/consolidation-v1`. Une branche locale
-`main` suit `origin/main` sans modification de ses commits. La branche locale
-antérieure fix/local-api-browser-access
-est également conservée et ne doit pas être supprimée implicitement.
+Les consolidations de cette mission forment une suite linéaire depuis main.
+La branche active est `codex/consolidation-v1` ; la branche locale `main` suit
+`origin/main` sans modification de ses commits.
+
+Huit références locales devenues de simples repères ont été remplacées par des
+tags légers sous `checkpoint/` : les six branches de lots, la branche de reprise
+audio et l'ancienne référence `work`. Chaque commit reste donc nommé et peut
+servir à recréer une branche de PR. Aucun commit n'a été abandonné.
+
+Trois branches locales subsistent : `main`, `codex/consolidation-v1` et la branche
+antérieure `fix/local-api-browser-access`, conservée parce qu'elle contient du
+travail distinct non intégré par cette mission. Elle ne doit pas être supprimée
+implicitement.
+
+Un bundle complet de l'historique a été créé et vérifié avant le rangement ;
+un second bundle vérifié conserve l'état après rangement local. Les références
+sauvegardées avant l'opération doivent toutes rester atteignables après celle-ci.
 
 Organisation visée : main stable, une branche de consolidation active, les
 branches des PR encore ouvertes et l'archive volontaire. Après intégration et

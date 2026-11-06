@@ -7,19 +7,19 @@ $ErrorActionPreference = 'Stop'
 $p = [Environment]::GetEnvironmentVariable('VOGUE_PRIVATE_PATH')
 $directory = [Environment]::GetEnvironmentVariable('VOGUE_PRIVATE_DIRECTORY') -eq '1'
 $user = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
-$system = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-18')
+$system = [System.Security.Principal.SecurityIdentifier]::new('S-1-5-18')
 if ($directory) {
-  $acl = New-Object System.Security.AccessControl.DirectorySecurity
+  $acl = [System.Security.AccessControl.DirectorySecurity]::new()
 } else {
-  $acl = New-Object System.Security.AccessControl.FileSecurity
+  $acl = [System.Security.AccessControl.FileSecurity]::new()
 }
 $acl.SetOwner($user)
 $acl.SetAccessRuleProtection($true, $false)
 foreach ($sid in @($user, $system)) {
   if ($directory) {
-    $rule = New-Object System.Security.AccessControl.FileSystemAccessRule($sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+    $rule = [System.Security.AccessControl.FileSystemAccessRule]::new($sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
   } else {
-    $rule = New-Object System.Security.AccessControl.FileSystemAccessRule($sid, 'FullControl', 'Allow')
+    $rule = [System.Security.AccessControl.FileSystemAccessRule]::new($sid, 'FullControl', 'Allow')
   }
   $acl.AddAccessRule($rule)
 }
@@ -32,6 +32,8 @@ export function protectWindowsPrivatePath(target, directory = false, run = spawn
     encoding: "utf8", windowsHide: true, timeout: 30_000
   });
   if (result.error || result.status !== 0) {
-    throw new Error("Protection Windows des secrets impossible. Vérifier les droits NTFS et la disponibilité de PowerShell.");
+    const detail = String(result.stderr || result.error?.code || result.status || "erreur inconnue")
+      .replaceAll(target, "[chemin privé]").replace(/S-\d-(?:\d+-)+\d+/gu, "[SID]").slice(0, 1200);
+    throw new Error("Protection Windows des secrets impossible. Vérifier les droits NTFS et la disponibilité de PowerShell. " + detail);
   }
 }

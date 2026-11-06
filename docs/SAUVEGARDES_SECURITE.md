@@ -110,3 +110,24 @@ La cohérence d'un instantané multi-fichiers pendant des écritures simultanée
 n'est pas garantie : arrêter les services avant une sauvegarde de référence.
 Le statut de création d'une archive chiffrée ne constitue pas à lui seul une
 recette de restauration ; vérifier le déchiffrement et les contenus récupérés.
+
+## Changements observés pendant l'archivage
+
+Avant de créer une archive claire ou directement chiffrée, les scripts relèvent
+un inventaire des dossiers et des fichiers réguliers, avec taille, permissions et
+SHA-256 en flux. Ils comparent ensuite le contenu archivé aux sources, puis
+contrôlent à nouveau l'inventaire. Un changement observé, y compris un ajout, un
+retrait ou une modification de même taille, interdit la publication du résultat.
+Les sources ne sont jamais remises dans leur ancien état pour faire réussir le
+contrôle. Une erreur supprime seulement la sortie temporaire de cette tentative.
+
+Pour le format chiffré, le contrôle déchiffre vers un pipe de comparaison tar,
+sans extraction ni fichier d'archive en clair. L'authentification AES-GCM doit
+également réussir avant publication. Ces contrôles ajoutent plusieurs lectures
+disque ; prévoir leur durée sur les longues réunions et les grands dossiers.
+
+Ce contrôle renforce la détection des changements mais ne transforme pas le
+système de fichiers en instantané transactionnel. Il faut toujours arrêter les
+services et les autres programmes qui écrivent les données avant une sauvegarde
+de référence. Une modification externe extrêmement brève peut échapper à deux
+inventaires ; aucune garantie d'instantané pendant une capture active n'est revendiquée.

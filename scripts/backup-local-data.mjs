@@ -2,6 +2,7 @@
 // Sauvegarde non destructive des données locales. Aucune archive dans Git.
 // Usage : node scripts/backup-local-data.mjs [dossier-destination]
 import fs from "node:fs";
+import { sourceManifest, requireUnchangedSource, compareBackupToSource } from "./lib/backup-consistency.mjs";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -15,6 +16,7 @@ if (!fs.existsSync(source) || !fs.statSync(source).isDirectory()) {
 }
 checkBackupSource(source);
 prepareBackupDestination(source, destination);
+const before = await sourceManifest(source);
 const stamp = new Date().toISOString().replace(/[:.]/g, "-");
 const target = path.join(destination, "vogue-merry-" + stamp + "-" + randomUUID() + ".tar.gz");
 const temporary = target + ".partial";
@@ -29,6 +31,8 @@ try {
   if (check.status !== 0 || !check.stdout.includes("VOGUE-MERRY-DONNEES/")) {
     throw new Error("Archive illisible ou contenu inattendu.");
   }
+  await compareBackupToSource(source, temporary);
+  await requireUnchangedSource(source, before);
   const sha256 = await sha256File(temporary);
   publishBackup(temporary, target);
   fs.chmodSync(target, 0o600);

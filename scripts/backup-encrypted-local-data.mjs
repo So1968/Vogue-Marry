@@ -2,6 +2,7 @@
 // Crée directement une archive chiffrée sans .tar.gz temporaire en clair.
 // Format compatible avec crypt-local-backup.mjs decrypt.
 import fs from "node:fs";
+import { sourceManifest, requireUnchangedSource, compareBackupToSource } from "./lib/backup-consistency.mjs";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID, randomBytes, scryptSync, createCipheriv } from "node:crypto";
@@ -16,6 +17,7 @@ const destination = path.resolve(process.argv[2] || path.join(os.homedir(), "VOG
 if (!fs.existsSync(source) || !fs.statSync(source).isDirectory()) throw new Error("Données absentes : " + source);
 checkBackupSource(source);
 prepareBackupDestination(source, destination);
+const before = await sourceManifest(source);
 const timestamp = new Date().toISOString().replace(/[:.]/gu, "-");
 const target = path.join(destination, "vogue-merry-" + timestamp + "-" + randomUUID() + ".tar.gz.enc");
 const temp = target + ".partial";
@@ -41,7 +43,10 @@ try {
     stopped
   ]);
   if (exitCode !== 0) throw new Error("Échec création archive : " + stderr);
-  fs.appendFileSync(temp, cipher.getAuthTag());
+  const tag = cipher.getAuthTag();
+  fs.appendFileSync(temp, tag);
+  await compareBackupToSource(source, temp, { key, header, tag });
+  await requireUnchangedSource(source, before);
   publishBackup(temp, target);
   fs.chmodSync(target, 0o600);
   console.log(JSON.stringify({ status: "encrypted", archive: target, unencryptedIntermediate: false, sourceUntouched: true }));

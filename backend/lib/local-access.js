@@ -1,3 +1,4 @@
+import { protectWindowsPrivatePath } from "./windows-private-path.js";
 import fs from "node:fs";
 import path from "node:path";
 import { randomBytes, timingSafeEqual } from "node:crypto";
@@ -28,6 +29,8 @@ export function browserAccessGuard(req, res, next) {
 export function loadInternalToken(configDir) {
   fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
   const tokenPath = path.join(configDir, "internal_api_token");
+  const windows = process.platform === "win32";
+  if (windows) protectWindowsPrivatePath(configDir, true);
   if (!fs.existsSync(tokenPath)) {
     const temporary = path.join(configDir, `.internal-token-${process.pid}-${randomBytes(8).toString("hex")}`);
     try {
@@ -37,11 +40,15 @@ export function loadInternalToken(configDir) {
       }
     } finally { fs.rmSync(temporary, { force: true }); }
   }
-  const fd = fs.openSync(tokenPath, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+  if (windows) {
+    if (!fs.lstatSync(tokenPath).isFile()) throw new Error("Secret interne non régulier.");
+    protectWindowsPrivatePath(tokenPath);
+  }
+  const fd = fs.openSync(tokenPath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
   try {
     const stat = fs.fstatSync(fd);
-    if (!stat.isFile() || (stat.mode & 0o077) !== 0 ||
-        (process.getuid && stat.uid !== process.getuid())) {
+    if (!stat.isFile() || (!windows && ((stat.mode & 0o077) !== 0 ||
+        (process.getuid && stat.uid !== process.getuid())))) {
       throw new Error("Permissions du secret interne non sûres.");
     }
     const token = fs.readFileSync(fd, "utf8");

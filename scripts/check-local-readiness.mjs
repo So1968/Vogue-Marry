@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { localPythonPath } from "../backend/lib/runtime-paths.js";
 // Diagnostic non destructif et sans lecture des enregistrements personnels.
 import fs from "node:fs";
 import os from "node:os";
@@ -14,7 +15,7 @@ function executable(command) {
 const home = os.homedir();
 const root = path.join(home, "VOGUE-MERRY-DONNEES");
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const venv = path.join(projectRoot, ".venv-transcription", "bin", "python");
+const venv = localPythonPath(projectRoot);
 const [api, transcription] = await Promise.all([
   probeLocalService("http://127.0.0.1:8010/api/health", "vogue-marry-local-backend"),
   probeLocalService("http://127.0.0.1:8010/api/transcription/health", "vogue-marry-transcription")

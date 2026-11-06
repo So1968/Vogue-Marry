@@ -1,3 +1,5 @@
+import { localPythonPath } from "./lib/runtime-paths.js";
+import { protectWindowsPrivatePath } from "./lib/windows-private-path.js";
 import { mapSpeakersFromIntroductions } from "./lib/speaker-identification.js";
 import { atomicWriteText, preserveOriginalTranscript, snapshotTranscript } from "./lib/transcription-history.js";
 import { browserAccessGuard, LOCAL_ORIGINS, loadInternalToken, internalAccessGuard } from "./lib/local-access.js";
@@ -22,7 +24,7 @@ const DATA_ROOT = path.join(HOME, "VOGUE-MERRY-DONNEES");
 const ROOT = path.join(DATA_ROOT, "99_TRANSCRIPTION_TESTS");
 const PROJECTS_ROOT = path.join(DATA_ROOT, "01_PROJETS");
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const LOCAL_PYTHON = path.join(PROJECT_ROOT, ".venv-transcription", "bin", "python");
+const LOCAL_PYTHON = localPythonPath(PROJECT_ROOT);
 const LOCAL_SCRIPT = path.join(PROJECT_ROOT, "backend", "local_transcribe.py");
 const DIARIZE_SCRIPT = path.join(PROJECT_ROOT, "backend", "local_diarize.py");
 const LOCAL_MODEL = process.env.VOGUE_WHISPER_MODEL || "large-v3-turbo";
@@ -47,6 +49,14 @@ const DEFAULT_CONTEXT = [
 
 fs.mkdirSync(ROOT, { recursive: true });
 fs.mkdirSync(CONFIG_DIR, { recursive: true });
+if (process.platform === "win32") {
+  for (const file of [API_KEY_FILE, HF_TOKEN_FILE]) {
+    if (fs.existsSync(file)) {
+      if (!fs.lstatSync(file).isFile()) throw new Error("Fichier de secret non régulier.");
+      protectWindowsPrivatePath(file);
+    }
+  }
+}
 // Refuse les noms d'hôte arbitraires, y compris en cas de DNS rebinding.
 app.use((req, res, next) => {
   const allowedHosts = new Set([`127.0.0.1:${PORT}`, `localhost:${PORT}`]);
@@ -1111,6 +1121,7 @@ app.post("/api/transcription/config/api-key", (req, res) => {
   if (!/^sk-/.test(key) || key.length < 20) return res.status(400).json({ error: "Cette clé API ne semble pas valide." });
   fs.writeFileSync(API_KEY_FILE, `${key}\n`, { encoding: "utf8", mode: 0o600 });
   fs.chmodSync(API_KEY_FILE, 0o600);
+  if (process.platform === "win32") protectWindowsPrivatePath(API_KEY_FILE);
   return res.json({ status: "ok", openAIConfigured: true });
 });
 
@@ -1124,6 +1135,7 @@ app.post("/api/transcription/config/hf-token", (req, res) => {
   if (!token || token.length < 15) return res.status(400).json({ error: "Ce jeton Hugging Face ne semble pas valide." });
   fs.writeFileSync(HF_TOKEN_FILE, `${token}\n`, { encoding: "utf8", mode: 0o600 });
   fs.chmodSync(HF_TOKEN_FILE, 0o600);
+  if (process.platform === "win32") protectWindowsPrivatePath(HF_TOKEN_FILE);
   return res.json({ status: "ok", huggingFaceConfigured: true });
 });
 

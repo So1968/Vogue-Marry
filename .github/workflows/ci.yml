@@ -43,3 +43,24 @@ jobs:
 
       - name: Auditer toutes les dépendances
         run: npm audit --audit-level=high
+
+  verify-windows:
+    runs-on: windows-latest
+    steps:
+      - name: Récupérer le dépôt
+        uses: actions/checkout@v4
+      - name: Installer Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Installer Python natif
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Installer les dépendances verrouillées
+        run: npm ci
+      - name: Vérifier les chemins, ACL et services natifs Windows
+        run: node --test --test-concurrency=1 tests/platform-runtime.test.mjs tests/windows-runtime.test.mjs
+      - name: Construire le frontend sous Windows
+        run: npm run build

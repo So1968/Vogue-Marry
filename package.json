@@ -10,8 +10,8 @@
     "test": "node --test --test-concurrency=1 tests/*.test.mjs",
     "preview": "vite preview",
     "backend": "node backend/server.js",
-    "transcription": "VOGUE_WHISPER_MODEL=large-v3-turbo node backend/transcription-server-v6.js",
-    "transcription:setup": "bash scripts/setup-local-transcription.sh",
+    "transcription": "node backend/transcription-server-v6.js",
+    "transcription:setup": "node scripts/setup-local-transcription.mjs",
     "dev:all": "concurrently \"npm run backend\" \"npm run transcription\" \"npm run dev\"",
     "check:local": "node scripts/check-local-readiness.mjs"
   },

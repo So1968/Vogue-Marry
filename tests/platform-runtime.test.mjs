@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { localPythonPath } from "../backend/lib/runtime-paths.js";
+import { localPythonPath, pythonProcessEnv } from "../backend/lib/runtime-paths.js";
 import { protectWindowsPrivatePath } from "../backend/lib/windows-private-path.js";
 import { findSetupPython, transcriptionSetupPlan } from "../scripts/lib/transcription-setup.mjs";
 
@@ -36,11 +36,18 @@ test("secrets Windows : chemin transmis comme donnée et échec ACL bloquant", (
   protectWindowsPrivatePath(target, true, (command, args, options) => {
     seen = { command, args, options }; return { status: 0 };
   });
-  assert.equal(seen.command, "powershell.exe");
+  assert.ok(seen.command.endsWith("\\System32\\WindowsPowerShell\\v1.0\\powershell.exe"));
   assert.equal(seen.options.env.VOGUE_PRIVATE_PATH, target);
   assert.equal(seen.options.env.VOGUE_PRIVATE_DIRECTORY, "1");
   assert.ok(!seen.args.join(" ").includes(target));
   assert.ok(!seen.args.includes("-ExecutionPolicy"));
   assert.throws(() => protectWindowsPrivatePath(target, false, () => ({ status: 1, stderr: "secret à ne pas recopier" })),
     /Protection Windows des secrets impossible/u);
+});
+
+
+test("Python : protocole UTF-8 indépendant de la page de code Windows", () => {
+  const prior = { PYTHONIOENCODING: "cp1252", PYTHONUTF8: "0", EXAMPLE: "fictif" };
+  assert.deepEqual(pythonProcessEnv(prior), { PYTHONIOENCODING: "utf-8", PYTHONUTF8: "1", EXAMPLE: "fictif" });
+  assert.equal(prior.PYTHONUTF8, "0");
 });

@@ -1,3 +1,4 @@
+import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 // Le mode POSIX 0600 ne constitue pas un contrôle d'accès sous Windows.
@@ -23,11 +24,19 @@ foreach ($sid in @($user, $system)) {
   }
   $acl.AddAccessRule($rule)
 }
-Set-Acl -LiteralPath $p -AclObject $acl
+if ($directory) {
+  [System.IO.Directory]::SetAccessControl($p, $acl)
+} else {
+  [System.IO.File]::SetAccessControl($p, $acl)
+}
 `;
 
+export function windowsPowerShellPath(env = process.env) {
+  return path.win32.join(env.SystemRoot || "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
+}
+
 export function protectWindowsPrivatePath(target, directory = false, run = spawnSync) {
-  const result = run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", PRIVATE_ACL_SCRIPT], {
+  const result = run(windowsPowerShellPath(), ["-NoProfile", "-NonInteractive", "-Command", PRIVATE_ACL_SCRIPT], {
     env: { ...process.env, VOGUE_PRIVATE_PATH: target, VOGUE_PRIVATE_DIRECTORY: directory ? "1" : "0" },
     encoding: "utf8", windowsHide: true, timeout: 30_000
   });

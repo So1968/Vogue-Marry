@@ -1,3 +1,4 @@
+import { windowsPowerShellPath } from "../backend/lib/windows-private-path.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
@@ -5,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
-import { localPythonPath } from "../backend/lib/runtime-paths.js";
+import { localPythonPath, pythonProcessEnv } from "../backend/lib/runtime-paths.js";
 
 test("Windows natif : Python dans un chemin avec espaces et services locaux avec secrets privés", {
   skip: process.platform !== "win32", timeout: 120_000
@@ -23,6 +24,11 @@ test("Windows natif : Python dans un chemin avec espaces et services locaux avec
     assert.equal(venv.status, 0, venv.stderr);
     const interpreter = localPythonPath(venvRoot);
     assert.equal(spawnSync(interpreter, ["-c", "import sys; assert sys.platform == 'win32'"], { env }).status, 0);
+    const unicode = spawnSync(interpreter, ["-c", "import json; print(json.dumps({'text': 'Mémoire fictive — voix 演示'}, ensure_ascii=False))"], {
+      env: pythonProcessEnv({ ...env, PYTHONIOENCODING: "cp1252" }), encoding: "utf8"
+    });
+    assert.equal(unicode.status, 0, unicode.stderr);
+    assert.equal(JSON.parse(unicode.stdout).text, "Mémoire fictive — voix 演示");
     for (const script of ["backend/server.js", "backend/transcription-server-v6.js"]) {
       const child = spawn(process.execPath, [script], { env, stdio: ["ignore", "pipe", "pipe"] });
       child.stdout.on("data", (data) => { logs += String(data); });
@@ -49,9 +55,9 @@ test("Windows natif : Python dans un chemin avec espaces et services locaux avec
     const token = path.join(home, ".config", "vogue-merry", "internal_api_token");
     assert.ok(fs.existsSync(token));
     // Contrôler les SID autorisés sans afficher leurs valeurs ni le secret.
-    const audit = spawnSync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", `
+    const audit = spawnSync(windowsPowerShellPath(), ["-NoProfile", "-NonInteractive", "-Command", `
 $ErrorActionPreference = 'Stop'
-$acl = Get-Acl -LiteralPath $env:VOGUE_TEST_TOKEN_PATH
+$acl = [System.IO.File]::GetAccessControl($env:VOGUE_TEST_TOKEN_PATH)
 $allowed = @([System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value, 'S-1-5-18')
 $rules = $acl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier])
 if (-not $acl.AreAccessRulesProtected) { exit 2 }

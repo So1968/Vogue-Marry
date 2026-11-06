@@ -1,4 +1,4 @@
-import { localPythonPath } from "./lib/runtime-paths.js";
+import { localPythonPath, pythonProcessEnv } from "./lib/runtime-paths.js";
 import { protectWindowsPrivatePath } from "./lib/windows-private-path.js";
 import { mapSpeakersFromIntroductions } from "./lib/speaker-identification.js";
 import { atomicWriteText, preserveOriginalTranscript, snapshotTranscript } from "./lib/transcription-history.js";
@@ -181,7 +181,9 @@ function run(command, args, options = {}) {
 
 function runJsonLines(command, args, onEvent) {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd: PROJECT_ROOT, env: process.env, stdio: ["ignore", "pipe", "pipe"] });
+    const child = spawn(command, args, { cwd: PROJECT_ROOT, env: pythonProcessEnv(), stdio: ["ignore", "pipe", "pipe"] });
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
     let buffer = "";
     let stderr = "";
     let eventError = "";

@@ -6,3 +6,8 @@ export function localPythonPath(projectRoot, platform = process.platform) {
     ? paths.join(projectRoot, ".venv-transcription", "Scripts", "python.exe")
     : paths.join(projectRoot, ".venv-transcription", "bin", "python");
 }
+
+
+export function pythonProcessEnv(env = process.env) {
+  return { ...env, PYTHONUTF8: "1", PYTHONIOENCODING: "utf-8" };
+}

@@ -930,3 +930,63 @@ test("transcription : corrections historisées, origine conservée et répétiti
     assert.equal(versions().length, 2);
   });
 });
+
+test("mémoire projet : escale → résultat synthétique → journal relu → validations → Log Pose", async () => {
+  await withUnifiedServer(async (home) => {
+    const api = async (route, body) => {
+      const response = await fetch("http://127.0.0.1:8010" + route, body ? {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+      } : {});
+      const payload = await response.json();
+      assert.ok(response.ok, `${route}: ${response.status} ${JSON.stringify(payload)}`);
+      return payload;
+    };
+    const projectName = "Île parcours mémoire fictif";
+    const project = await api("/api/projects", { name: projectName });
+    const projectSlug = project.project.slug;
+    const meeting = await api("/api/meetings/export", { projectName, title: "Escale mémoire fictive", meetingDate: "2026-11-06",
+      participants: "Voix fictive A", actions: "- Préparer la recette fictive", decisions: "- Garder les sources locales" });
+    const meetingDirName = meeting.meetingDirName;
+    const coordinates = { projectSlug, meetingDirName };
+    const form = new FormData();
+    form.append("projectName", projectName); form.append("meetingDirName", meetingDirName);
+    form.append("audio", new Blob(["AUDIO_FICTIF_NON_DECODABLE"], { type: "audio/webm" }), "fictif.webm");
+    assert.equal((await fetch("http://127.0.0.1:8010/api/meetings/export-audio", { method: "POST", body: form })).status, 201);
+    // Résultat moteur injecté : cette recette n'exécute pas les modèles de reconnaissance.
+    const dir = path.join(home, "VOGUE-MERRY-DONNEES", "99_TRANSCRIPTION_TESTS", "job-parcours-fictif");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "transcription.json"), JSON.stringify({ jobId: "job-parcours-fictif", participants: ["Voix fictive A"],
+      meeting: { id: `${projectSlug}/${meetingDirName}` }, segments: [{ sourceSpeaker: "SPEAKER_00", speaker: "Intervenant 1",
+        speakerConfidence: "non-identifie", text: "Conservons la source et préparons la recette.", start: 0 }] }));
+    await api("/api/transcription/job-parcours-fictif/speakers", { mapping: { SPEAKER_00: "Voix fictive A" } });
+    const report = await api("/api/meetings/read-report", coordinates);
+    assert.match(report.content, /Voix fictive A/u);
+    await api("/api/meetings/save-report", { ...coordinates, content: report.content + "\nNote humaine fictive relue.\n" });
+    const actionsRoute = `/api/knowledge/action?projectSlug=${projectSlug}`;
+    assert.equal((await api(actionsRoute)).items.length, 0, "Aucune proposition avant validation du journal.");
+    await api("/api/meetings/validate", coordinates);
+    assert.equal((await api("/api/meetings/validate", coordinates)).status, "already-validated");
+    const actions = await api(actionsRoute);
+    const decisions = await api(`/api/knowledge/decision?projectSlug=${projectSlug}`);
+    assert.equal(actions.items.length, 1); assert.equal(decisions.items.length, 1);
+    const logRoute = `/api/log-pose?projectSlug=${projectSlug}`;
+    const pending = (await api(logRoute)).logPose;
+    assert.equal(pending.priorityActions.length, 0); assert.equal(pending.lastDecision, null);
+    assert.equal(pending.pendingReview.actions, 1); assert.equal(pending.pendingReview.decisions, 1);
+    const action = await api("/api/knowledge/action/validate", { projectSlug, itemId: actions.items[0].id, item: { statut: "En cours" } });
+    await api("/api/knowledge/decision/validate", { projectSlug, itemId: decisions.items[0].id });
+    await api("/api/log-pose/save", { projectSlug, whatToRemember: "Repère humain fictif.", nextDirection: "Vérifier le parcours fictif." });
+    const resumed = (await api(logRoute)).logPose;
+    assert.equal(resumed.lastDecision.decision, "Garder les sources locales");
+    assert.equal(resumed.priorityActions[0].id, action.item.id);
+    assert.equal(resumed.pendingReview.total, 0);
+    assert.equal(resumed.whatToRemember, "Repère humain fictif.");
+    const projectDir = path.join(home, "VOGUE-MERRY-DONNEES", "01_PROJETS", projectSlug);
+    const persisted = JSON.parse(fs.readFileSync(path.join(projectDir, "10_log_pose", "log_pose.json"), "utf8"));
+    assert.equal(persisted.lastDecision.id, resumed.lastDecision.id);
+    await api("/api/knowledge/action/update-status", { projectSlug, itemId: action.item.id, statut: "Terminé" });
+    assert.equal((await api(logRoute)).logPose.priorityActions.length, 0);
+    assert.equal((await api(logRoute)).logPose.whatToRemember, "Repère humain fictif.");
+    assert.equal(fs.readFileSync(path.join(projectDir, "01_escales_reunions", meetingDirName, "audio_original.webm"), "utf8"), "AUDIO_FICTIF_NON_DECODABLE");
+  });
+});

@@ -41,3 +41,26 @@ test("synthèse globale : agrège toutes les îles sans confondre leurs projets"
   assert.deepEqual(result.priorityActions.map(a => a.projectName), ["ile_alpha","ile_beta"]);
   assert.equal(result.nextDirection, "Relancer");
 });
+
+test("synthèse globale : les priorités ne dépendent pas de l'ordre des îles", () => {
+  const synthesis = makeLogPoseSynthesis({
+    readKnowledgeEntries: (slug, kind) => {
+      if (kind === "action") return slug === "ile_premiere"
+        ? Array.from({ length: 5 }, (_, i) => ({ id: `attente-${i}`, action: "À préparer", statut: "À faire", date: "2026-11-05" }))
+        : [{ id: "prioritaire", action: "Reprendre le travail engagé", statut: "En cours", date: "2026-11-06" }];
+      if (kind === "need") return [{ id: slug, need: "Besoin fictif", date: slug === "ile_premiere" ? "2026-11-06" : "2026-11-01" }];
+      return [];
+    },
+    readValidatedKnowledgeProposals: () => [], listProjectMeetings: () => [],
+    readProjectRecord: (slug) => ({ name: slug }),
+    readLogPoseManual: () => ({ whatToRemember: "", openQuestions: [], documentsToFind: [], nextDirection: "" })
+  });
+  for (const slugs of [["ile_premiere", "ile_seconde"], ["ile_seconde", "ile_premiere"]]) {
+    const result = synthesis.buildGlobalLogPose(slugs);
+    assert.equal(result.priorityActions.length, 5);
+    assert.equal(result.priorityActions[0].id, "prioritaire");
+    assert.equal(result.priorityActions[0].projectName, "ile_seconde");
+    assert.equal(result.nextDirection, "Reprendre le travail engagé");
+    assert.equal(result.priorityNeeds[0].id, "ile_seconde");
+  }
+});

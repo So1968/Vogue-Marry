@@ -47,6 +47,10 @@ Le moteur 8011 exige un secret interne local ; l’interface et les diagnostics 
 
 ## Démarrage
 
+Prérequis : Node **22.12 ou plus récent** (branche 22 LTS recommandée), Python 3
+avec venv, `ffmpeg` et `ffprobe`. Voir [installation et réception locale](docs/INSTALLATION_RECEPTION.md).
+
+
 ```bash
 npm ci
 npm run transcription:setup
@@ -54,6 +58,8 @@ npm run dev:all
 ```
 
 Interface de développement : `http://localhost:5173`.
+
+Diagnostic sans lecture des contenus personnels : `npm run check:local`.
 
 ## Contrôles
 

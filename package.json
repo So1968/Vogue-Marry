@@ -12,7 +12,8 @@
     "backend": "node backend/server.js",
     "transcription": "VOGUE_WHISPER_MODEL=large-v3-turbo node backend/transcription-server-v6.js",
     "transcription:setup": "bash scripts/setup-local-transcription.sh",
-    "dev:all": "concurrently \"npm run backend\" \"npm run transcription\" \"npm run dev\""
+    "dev:all": "concurrently \"npm run backend\" \"npm run transcription\" \"npm run dev\"",
+    "check:local": "node scripts/check-local-readiness.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "6.1.2",
@@ -32,5 +33,8 @@
     "eslint-plugin-react-refresh": "0.5.7",
     "globals": "17.12.0"
   },
-  "type": "module"
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  }
 }

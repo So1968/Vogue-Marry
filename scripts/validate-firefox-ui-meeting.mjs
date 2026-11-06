@@ -101,8 +101,42 @@ try {
     .filter((item) => item.isDirectory());
   assert.equal(secondMeetingFolders.length, 2, "La capture coupée doit produire une escale supplémentaire.");
 
+  // Refus du miroir localStorage : le compteur et les fragments IndexedDB
+  // doivent suffire pour finaliser un enregistrement dans un vrai Firefox.
+  await page.reload();
+  await page.locator(".side-nav button").filter({ hasText: "Escales" }).click();
+  await page.evaluate(() => {
+    const originalSetItem = Storage.prototype.setItem;
+    window.__blockedSessionWrites = 0;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === "vogue-mary-audio-active-session") {
+        window.__blockedSessionWrites++;
+        throw new DOMException("Quota synthétique pour la recette", "QuotaExceededError");
+      }
+      return originalSetItem.call(this, key, value);
+    };
+  });
+  await page.getByLabel("Île / projet").selectOption(slug);
+  await page.getByLabel("Titre de l’escale").fill("Escale test miroir localStorage refusé");
+  await page.getByRole("button", { name: "Démarrer l’enregistrement" }).click();
+  await page.getByRole("button", { name: "Arrêter la réunion" }).waitFor({ state: "visible", timeout: 10000 });
+  await page.waitForTimeout(7100);
+  await page.getByRole("button", { name: "Arrêter la réunion" }).click();
+  await page.getByText("Audio finalisé et sauvegardé.", { exact: false }).waitFor({ timeout: 25000 });
+  const blockedSessionWrites = await page.evaluate(() => window.__blockedSessionWrites);
+  assert.ok(blockedSessionWrites > 0, "Le scénario doit réellement refuser l'écriture du miroir.");
+  assert.equal(await page.evaluate(() => localStorage.getItem("vogue-mary-audio-active-session")), null);
+  const finalMeetingFolders = fs.readdirSync(meetingsRoot, { withFileTypes: true }).filter((item) => item.isDirectory());
+  assert.equal(finalMeetingFolders.length, 3);
+  for (const folder of finalMeetingFolders) {
+    const directory = path.join(meetingsRoot, folder.name);
+    const audio = fs.readdirSync(directory).filter((name) => name.startsWith("audio_original."));
+    assert.equal(audio.length, 1);
+    assert.ok(fs.statSync(path.join(directory, audio[0])).size > 100);
+  }
+
   console.log("RESULTAT_INTERFACE_FIREFOX", JSON.stringify({
-    escales: folders.length, audio: originals[0], markers: meta.markers.length, title
+    escales: finalMeetingFolders.length, audio: originals[0], markers: meta.markers.length, title, blockedSessionWrites
   }));
 } finally {
   if (browser) await browser.close();

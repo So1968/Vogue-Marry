@@ -1,3 +1,4 @@
+import { loadInternalToken, INTERNAL_TOKEN_HEADER } from "../backend/lib/local-access.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
@@ -5,6 +6,14 @@ import http from "node:http";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+
+let engineToken;
+// Les tests du moteur jouent le rôle de la façade avec un secret synthétique local.
+function fetch(url, options = {}) {
+  const headers = new Headers(options.headers);
+  if (new URL(url).port !== "8010") headers.set(INTERNAL_TOKEN_HEADER, engineToken);
+  return globalThis.fetch(url, { ...options, headers });
+}
 
 const ROOT = process.cwd();
 
@@ -28,6 +37,7 @@ async function waitFor(url, attempts = 40) {
 
 async function withServer(script, port, callback, healthPath = port === 8010 ? "health" : "transcription/health") {
   const home = makeHome();
+  engineToken = loadInternalToken(path.join(home, ".config", "vogue-merry"));
   const child = spawn(process.execPath, [script], {
     cwd: ROOT,
     env: { ...process.env, HOME: home },
@@ -38,7 +48,7 @@ async function withServer(script, port, callback, healthPath = port === 8010 ? "
   child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
 
   try {
-    await waitFor(`http://127.0.0.1:${port}/api/${healthPath}`);
+    await waitFor(`http://127.0.0.1:${port}/api/${port === 8010 ? healthPath : "transcription/escales"}`);
     await callback(home);
   } catch (error) {
     if (stderr.trim()) error.message += `\nServeur : ${stderr.trim()}`;
@@ -51,6 +61,7 @@ async function withServer(script, port, callback, healthPath = port === 8010 ? "
 
 async function withUnifiedServer(callback) {
   const home = makeHome();
+  engineToken = loadInternalToken(path.join(home, ".config", "vogue-merry"));
   const env = { ...process.env, HOME: home, VOGUE_TRANSCRIPTION_PORT: "8011" };
   const children = [
     spawn(process.execPath, ["backend/transcription-server-v6.js"], {
@@ -72,7 +83,7 @@ async function withUnifiedServer(callback) {
   });
 
   try {
-    await waitFor("http://127.0.0.1:8010/api/transcription/health");
+    await waitFor("http://127.0.0.1:8010/api/transcription/escales");
     await callback(home);
   } catch (error) {
     const details = Array.from(stderr.values()).filter(Boolean).join("\n");
@@ -119,7 +130,7 @@ test("les API locales refusent un Host étranger", async () => {
     await withServer(script, port, async () => {
       const url = `http://127.0.0.1:${port}/api/${healthPath}`;
       const requestWithHost = (host) => new Promise((resolve, reject) => {
-        const request = http.get(url, { headers: { host } }, (response) => {
+        const request = http.get(url, { headers: { host, [INTERNAL_TOKEN_HEADER]: engineToken } }, (response) => {
           response.resume();
           response.on("end", () => resolve(response.statusCode));
         });
@@ -811,5 +822,177 @@ test("API unifiée : confirme et persiste une correspondance", async () => {
     const meeting = inbox.items.find((item) => item.meetingDirName === "2026-09-19_escale_reunion");
     assert.equal(meeting.hasTranscription, true);
     assert.equal(meeting.status, "Transcription à relire");
+  });
+});
+
+test("8011 refuse les appels directs et 8010 conserve le secret côté serveur", async () => {
+  await withUnifiedServer(async (home) => {
+    const tokenPath = path.join(home, ".config", "vogue-merry", "internal_api_token");
+    assert.equal(fs.statSync(tokenPath).mode & 0o777, 0o600);
+    for (const route of ["health", "escales", "config", "job_fictif"]) {
+      for (const headers of [{}, { [INTERNAL_TOKEN_HEADER]: "faux-secret" }]) {
+        const denied = await globalThis.fetch(`http://127.0.0.1:8011/api/transcription/${route}`, { headers });
+        assert.equal(denied.status, 403);
+        assert.deepEqual(await denied.json(), { error: "Accès réservé à la façade locale." });
+      }
+    }
+    const directWrite = await globalThis.fetch("http://127.0.0.1:8011/api/transcription/config/hf-token", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: "JETON_FICTIF_NE_PAS_ENREGISTRER" })
+    });
+    assert.equal(directWrite.status, 403);
+    assert.equal(fs.existsSync(path.join(home, ".config", "vogue-merry", "huggingface_token")), false);
+    const gateway = await fetch("http://127.0.0.1:8010/api/transcription/health", {
+      headers: { [INTERNAL_TOKEN_HEADER]: "tentative-de-substitution" }
+    });
+    assert.equal(gateway.status, 200);
+    assert.equal(gateway.headers.get(INTERNAL_TOKEN_HEADER), null);
+    assert.ok(!(await gateway.text()).includes(engineToken));
+  });
+});
+
+test("lectures navigateur : refuse les autres ports locaux et préserve les médias de l'interface", async () => {
+  for (const [script, port, healthPath] of [
+    ["backend/server.js", 8010, "health"],
+    ["backend/transcription-server-v6.js", 8011, "transcription/health"]
+  ]) {
+    await withServer(script, port, async () => {
+      const url = `http://127.0.0.1:${port}/api/${healthPath}`;
+      for (const headers of [
+        { "Sec-Fetch-Site": "same-site" },
+        { "Sec-Fetch-Site": "none" },
+        { "Sec-Fetch-Site": "same-site", Referer: "http://localhost:9999/page" },
+        { "Sec-Fetch-Site": "cross-site", Referer: "http://localhost:5173/" },
+        { Origin: "null" }
+      ]) assert.equal((await fetch(url, { headers })).status, 403, JSON.stringify(headers));
+      for (const origin of ["http://localhost:5173", "http://127.0.0.1:5173"]) {
+        const media = await fetch(url, {
+          headers: { "Sec-Fetch-Site": "same-site", "Sec-Fetch-Dest": "audio", Referer: `${origin}/` }
+        });
+        assert.equal(media.status, 200);
+        assert.equal(media.headers.get("cache-control"), "no-store");
+        assert.equal(media.headers.get("x-content-type-options"), "nosniff");
+      }
+    }, healthPath);
+  }
+});
+
+test("transcription : corrections historisées, origine conservée et répétition idempotente", async () => {
+  await withUnifiedServer(async (home) => {
+    const root = path.join(home, "VOGUE-MERRY-DONNEES");
+    const dir = path.join(root, "99_TRANSCRIPTION_TESTS", "job-historique-fictif");
+    const meetingDir = path.join(root, "01_PROJETS", "ile_fictive", "01_escales_reunions", "escale_fictive");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(meetingDir, { recursive: true });
+    const original = JSON.stringify({ jobId: "job-historique-fictif", participants: ["Voix fictive A", "Voix fictive B"],
+      meeting: { id: "ile_fictive/escale_fictive" },
+      segments: [{ sourceSpeaker: "SPEAKER_00", speaker: "Intervenant 1", speakerConfidence: "non-identifie", text: "Texte synthétique." }],
+      unresolvedSpeakers: ["Intervenant 1"] });
+    fs.writeFileSync(path.join(dir, "transcription.json"), original);
+    fs.writeFileSync(path.join(dir, "transcription_locale_brute.json"), "ORIGINAL_TECHNIQUE_FICTIF");
+    fs.writeFileSync(path.join(dir, "audio_original.webm"), "AUDIO_FICTIF");
+    fs.writeFileSync(path.join(meetingDir, "donnees_escale.json"), "{}");
+    fs.writeFileSync(path.join(meetingDir, "journal_de_bord_exporte.md"), "Correction humaine fictive avant confirmation.\n");
+    fs.writeFileSync(path.join(meetingDir, "journal_de_bord_valide.md"), "JOURNAL_VALIDE_FICTIF");
+    const confirm = async (mapping) => {
+      const response = await fetch("http://127.0.0.1:8010/api/transcription/job-historique-fictif/speakers", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mapping })
+      });
+      return { status: response.status, data: await response.json() };
+    };
+    assert.equal((await confirm({ VOIX_INEXISTANTE: "Voix fictive A" })).status, 400);
+    assert.equal(fs.existsSync(path.join(dir, "99_versions")), false);
+    const first = await confirm({ SPEAKER_00: "Voix fictive A" });
+    assert.equal(first.status, 200);
+    assert.deepEqual(first.data.unresolvedSpeakers, []);
+    assert.equal(fs.readFileSync(path.join(dir, "transcription_originale.json"), "utf8"), original);
+    const versions = () => fs.readdirSync(path.join(dir, "99_versions"));
+    assert.equal(versions().length, 1);
+    const firstVersion = path.join(dir, "99_versions", versions()[0]);
+    assert.equal(fs.readFileSync(path.join(firstVersion, "moteur", "transcription.json"), "utf8"), original);
+    assert.equal(fs.readFileSync(path.join(firstVersion, "escale", "journal_de_bord_exporte.md"), "utf8"), "Correction humaine fictive avant confirmation.\n");
+    const corrected = fs.readFileSync(path.join(dir, "transcription.json"), "utf8");
+    assert.equal((await confirm({ SPEAKER_00: "Voix fictive A" })).data.persistedToMeeting, true);
+    assert.equal(versions().length, 1);
+    assert.equal(fs.readFileSync(path.join(dir, "transcription.json"), "utf8"), corrected);
+    assert.equal((await confirm({ SPEAKER_00: "Voix fictive B" })).status, 200);
+    assert.equal(versions().length, 2);
+    assert.equal(fs.readFileSync(path.join(dir, "transcription_originale.json"), "utf8"), original);
+    assert.equal(fs.readFileSync(path.join(dir, "transcription_locale_brute.json"), "utf8"), "ORIGINAL_TECHNIQUE_FICTIF");
+    assert.equal(fs.readFileSync(path.join(dir, "audio_original.webm"), "utf8"), "AUDIO_FICTIF");
+    assert.equal(fs.readFileSync(path.join(meetingDir, "journal_de_bord_valide.md"), "utf8"), "JOURNAL_VALIDE_FICTIF");
+    // Une publication partielle ne doit pas être bloquée par l'idempotence des noms.
+    const interrupted = JSON.parse(fs.readFileSync(path.join(dir, "transcription.json"), "utf8"));
+    interrupted.persistedToMeeting = false;
+    fs.writeFileSync(path.join(dir, "transcription.json"), JSON.stringify(interrupted));
+    assert.equal((await confirm({ SPEAKER_00: "Voix fictive B" })).data.result.persistedToMeeting, true);
+    assert.equal(versions().length, 3);
+    // Si l'historique ne peut pas être copié, refuser avant toute correction.
+    fs.unlinkSync(path.join(meetingDir, "journal_de_bord_exporte.md"));
+    fs.symlinkSync(path.join(dir, "transcription_locale_brute.json"), path.join(meetingDir, "journal_de_bord_exporte.md"));
+    const beforeFailure = fs.readFileSync(path.join(dir, "transcription.json"), "utf8");
+    assert.equal((await confirm({ SPEAKER_00: "Voix fictive A" })).status, 500);
+    assert.equal(fs.readFileSync(path.join(dir, "transcription.json"), "utf8"), beforeFailure);
+    assert.equal(versions().length, 3);
+  });
+});
+
+test("mémoire projet : escale → résultat synthétique → journal relu → validations → Log Pose", async () => {
+  await withUnifiedServer(async (home) => {
+    const api = async (route, body) => {
+      const response = await fetch("http://127.0.0.1:8010" + route, body ? {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+      } : {});
+      const payload = await response.json();
+      assert.ok(response.ok, `${route}: ${response.status} ${JSON.stringify(payload)}`);
+      return payload;
+    };
+    const projectName = "Île parcours mémoire fictif";
+    const project = await api("/api/projects", { name: projectName });
+    const projectSlug = project.project.slug;
+    const meeting = await api("/api/meetings/export", { projectName, title: "Escale mémoire fictive", meetingDate: "2026-11-06",
+      participants: "Voix fictive A", actions: "- Préparer la recette fictive", decisions: "- Garder les sources locales" });
+    const meetingDirName = meeting.meetingDirName;
+    const coordinates = { projectSlug, meetingDirName };
+    const form = new FormData();
+    form.append("projectName", projectName); form.append("meetingDirName", meetingDirName);
+    form.append("audio", new Blob(["AUDIO_FICTIF_NON_DECODABLE"], { type: "audio/webm" }), "fictif.webm");
+    assert.equal((await fetch("http://127.0.0.1:8010/api/meetings/export-audio", { method: "POST", body: form })).status, 201);
+    // Résultat moteur injecté : cette recette n'exécute pas les modèles de reconnaissance.
+    const dir = path.join(home, "VOGUE-MERRY-DONNEES", "99_TRANSCRIPTION_TESTS", "job-parcours-fictif");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, "transcription.json"), JSON.stringify({ jobId: "job-parcours-fictif", participants: ["Voix fictive A"],
+      meeting: { id: `${projectSlug}/${meetingDirName}` }, segments: [{ sourceSpeaker: "SPEAKER_00", speaker: "Intervenant 1",
+        speakerConfidence: "non-identifie", text: "Conservons la source et préparons la recette.", start: 0 }] }));
+    await api("/api/transcription/job-parcours-fictif/speakers", { mapping: { SPEAKER_00: "Voix fictive A" } });
+    const report = await api("/api/meetings/read-report", coordinates);
+    assert.match(report.content, /Voix fictive A/u);
+    await api("/api/meetings/save-report", { ...coordinates, content: report.content + "\nNote humaine fictive relue.\n" });
+    const actionsRoute = `/api/knowledge/action?projectSlug=${projectSlug}`;
+    assert.equal((await api(actionsRoute)).items.length, 0, "Aucune proposition avant validation du journal.");
+    await api("/api/meetings/validate", coordinates);
+    assert.equal((await api("/api/meetings/validate", coordinates)).status, "already-validated");
+    const actions = await api(actionsRoute);
+    const decisions = await api(`/api/knowledge/decision?projectSlug=${projectSlug}`);
+    assert.equal(actions.items.length, 1); assert.equal(decisions.items.length, 1);
+    const logRoute = `/api/log-pose?projectSlug=${projectSlug}`;
+    const pending = (await api(logRoute)).logPose;
+    assert.equal(pending.priorityActions.length, 0); assert.equal(pending.lastDecision, null);
+    assert.equal(pending.pendingReview.actions, 1); assert.equal(pending.pendingReview.decisions, 1);
+    const action = await api("/api/knowledge/action/validate", { projectSlug, itemId: actions.items[0].id, item: { statut: "En cours" } });
+    await api("/api/knowledge/decision/validate", { projectSlug, itemId: decisions.items[0].id });
+    await api("/api/log-pose/save", { projectSlug, whatToRemember: "Repère humain fictif.", nextDirection: "Vérifier le parcours fictif." });
+    const resumed = (await api(logRoute)).logPose;
+    assert.equal(resumed.lastDecision.decision, "Garder les sources locales");
+    assert.equal(resumed.priorityActions[0].id, action.item.id);
+    assert.equal(resumed.pendingReview.total, 0);
+    assert.equal(resumed.whatToRemember, "Repère humain fictif.");
+    const projectDir = path.join(home, "VOGUE-MERRY-DONNEES", "01_PROJETS", projectSlug);
+    const persisted = JSON.parse(fs.readFileSync(path.join(projectDir, "10_log_pose", "log_pose.json"), "utf8"));
+    assert.equal(persisted.lastDecision.id, resumed.lastDecision.id);
+    await api("/api/knowledge/action/update-status", { projectSlug, itemId: action.item.id, statut: "Terminé" });
+    assert.equal((await api(logRoute)).logPose.priorityActions.length, 0);
+    assert.equal((await api(logRoute)).logPose.whatToRemember, "Repère humain fictif.");
+    assert.equal(fs.readFileSync(path.join(projectDir, "01_escales_reunions", meetingDirName, "audio_original.webm"), "utf8"), "AUDIO_FICTIF_NON_DECODABLE");
   });
 });

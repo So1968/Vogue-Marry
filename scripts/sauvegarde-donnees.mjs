@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
+import { assertOutsideDirectory } from "./lib/backup-safety.mjs";
 
 const sourceDefault = path.join(os.homedir(), "VOGUE-MERRY-DONNEES");
 const [command, first, second] = process.argv.slice(2);
@@ -21,6 +22,7 @@ function hash(file) {
   return digest.digest("hex");
 }
 function inspect(root) {
+  if (!fs.lstatSync(root).isDirectory()) fail("Racine de données non régulière : lien interdit.");
   const files = [];
   function walk(dir, prefix = "") {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -67,7 +69,7 @@ try {
     const source = path.resolve(first);
     const parent = path.resolve(second);
     if (!fs.statSync(source).isDirectory()) fail("Source introuvable.");
-    if (parent === source || parent.startsWith(source + path.sep)) fail("Destination à placer hors de la source.");
+    assertOutsideDirectory(source, parent);
     const files = inspect(source);
     fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
     const prefix = new Date().toISOString().replace(/[:.]/g, "-");
@@ -80,7 +82,7 @@ try {
     const source = path.resolve(first || sourceDefault);
     const destination = second && path.resolve(second);
     if (!destination) fail("Usage : backup [source] <destination-nouvelle>");
-    if (destination === source || destination.startsWith(source + path.sep)) fail("Destination à placer hors de la source.");
+    assertOutsideDirectory(source, destination);
     if (!fs.statSync(source).isDirectory()) fail("Source introuvable.");
     const original = inspect(source);
     ensureNestedParent(path.dirname(destination));
@@ -98,8 +100,8 @@ try {
     if (!first || !second) fail("Usage : restore <dossier-sauvegarde> <destination-nouvelle>");
     const backup = path.resolve(first);
     const destination = path.resolve(second);
-    if (destination === sourceDefault || destination.startsWith(sourceDefault + path.sep)) fail("Restauration dans les données actives interdite.");
-    if (destination === backup || destination.startsWith(backup + path.sep)) fail("Restauration dans la sauvegarde interdite.");
+    assertOutsideDirectory(sourceDefault, destination);
+    assertOutsideDirectory(backup, destination);
     const manifest = verify(backup);
     ensureNestedParent(path.dirname(destination));
     ensureNewDirectory(destination);

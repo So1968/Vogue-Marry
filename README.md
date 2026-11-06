@@ -6,10 +6,12 @@
 
 ## État du dépôt
 
-- `main` est le tronc stable et la seule branche de développement à utiliser désormais.
-- Les anciennes branches de travail ont été rassemblées sur le même état que `main`.
+- `main` est le tronc stable ; les évolutions sont préparées sur une branche de consolidation active, puis intégrées par PR vérifiée.
+- Les 79 anciennes branches déjà intégrées ont été supprimées après vérification des têtes et sauvegarde de l’historique. Les branches de PR ouvertes restent conservées.
 - `archive/rustines-esthetiques-20260731` reste volontairement séparée : c’est une archive, pas une branche à fusionner.
 - Les données personnelles et projets réels restent hors de Git, dans `~/VOGUE-MERRY-DONNEES`.
+
+Voir [l’inventaire et le nettoyage du 6 novembre 2026](docs/GIT_BRANCHES_2026-11-06.md) : 10 branches distantes conservées, dont la consolidation, les 7 branches de PR antérieures, `main` et l’archive volontaire.
 
 ## Parcours produit
 
@@ -43,7 +45,13 @@ React + Vite.
 
 Les services locaux écoutent uniquement sur `127.0.0.1`. Le port 8012 et les anciens moteurs V1 à V5 ont été retirés du code actif.
 
+Le moteur 8011 exige un secret interne local ; l’interface et les diagnostics passent par 8010. Voir [les contrôles d’accès et le renouvellement du secret](docs/SECURITE_API_LOCALE.md).
+
 ## Démarrage
+
+Prérequis : Node **22.12 ou plus récent** (branche 22 LTS recommandée), Python 3
+avec venv, `ffmpeg` et `ffprobe`. Voir [installation et réception locale](docs/INSTALLATION_RECEPTION.md).
+
 
 ```bash
 npm ci
@@ -52,6 +60,8 @@ npm run dev:all
 ```
 
 Interface de développement : `http://localhost:5173`.
+
+Diagnostic sans lecture des contenus personnels : `npm run check:local`.
 
 ## Contrôles
 

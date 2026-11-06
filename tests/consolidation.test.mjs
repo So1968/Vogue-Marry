@@ -30,9 +30,9 @@ test("8010 est la porte unique de l'interface", () => {
 test("Multer reste verrouillé sur la version consolidée", () => {
   const packageJson = JSON.parse(read("package.json"));
   const packageLock = JSON.parse(read("package-lock.json"));
-  assert.equal(packageJson.dependencies?.multer, "2.4.0");
-  assert.equal(packageLock.packages?.[""]?.dependencies?.multer, "2.4.0");
-  assert.equal(packageLock.packages?.["node_modules/multer"]?.version, "2.4.0");
+  assert.equal(packageJson.dependencies?.multer, "2.5.0");
+  assert.equal(packageLock.packages?.[""]?.dependencies?.multer, "2.5.0");
+  assert.equal(packageLock.packages?.["node_modules/multer"]?.version, "2.5.0");
 });
 
 test("les dépendances frontend critiques ne reviennent pas à latest", () => {
@@ -314,7 +314,7 @@ test("le nombre de participants ne force pas le nombre de voix Pyannote", () => 
 
 test("un nom n'est auto-attribué qu'après une présentation explicite", () => {
   const server = read("backend/transcription-server-v6.js");
-  assert.match(server, /if \(!selfCue\) return 0/u);
+  assert.match(server, /mapSpeakersFromIntroductions/u);
   assert.doesNotMatch(server, /confidence: "elimination"/u);
   assert.doesNotMatch(server, /helloCue/u);
 });

@@ -1,3 +1,5 @@
+import { audioFileDigest, appendAudioFile, audioMatchesChunks } from "./lib/audio-files.js";
+import { browserAccessGuard, LOCAL_ORIGINS, loadInternalToken, INTERNAL_TOKEN_HEADER } from "./lib/local-access.js";
 import express from "express";
 import cors from "cors";
 import fs from "fs";
@@ -37,10 +39,8 @@ const HOME = os.homedir();
 const DATA_ROOT = path.join(HOME, "VOGUE-MERRY-DONNEES");
 const PROJECTS_ROOT = path.join(DATA_ROOT, "01_PROJETS");
 const WATER_SEVEN_ROOT = path.join(DATA_ROOT, "00_WATER_SEVEN_PORT_ENTREE");
-const ALLOWED_ORIGINS = new Set([
-  "http://127.0.0.1:5173",
-  "http://localhost:5173"
-]);
+const ALLOWED_ORIGINS = LOCAL_ORIGINS;
+const internalToken = loadInternalToken(path.join(HOME, ".config", "vogue-merry"));
 const DOCUMENT_EXTENSIONS = new Set([
   ".csv",
   ".doc",
@@ -76,18 +76,7 @@ app.use((req, res, next) => {
   next();
 });
 
-// Refuse aussi les lectures déclenchées depuis une page Web étrangère.
-// Les clients non-navigateurs sans Origin ni Fetch Metadata restent compatibles.
-// Bloque les requêtes mutantes signalées comme intersites par le navigateur.
-// Les clients locaux sans Origin et sans Fetch Metadata restent compatibles.
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-  const fetchSite = req.headers["sec-fetch-site"];
-  if ((origin && !ALLOWED_ORIGINS.has(origin)) || fetchSite === "cross-site") {
-    return res.status(403).json({ error: "Modification depuis une origine non autorisée." });
-  }
-  next();
-});
+app.use(browserAccessGuard);
 
 app.use(cors({
   origin(origin, callback) {
@@ -101,6 +90,8 @@ app.use(cors({
 function proxyTranscriptionRequest(req, res) {
   const headers = { ...req.headers, host: `${TRANSCRIPTION_HOST}:${TRANSCRIPTION_PORT}` };
   HOP_BY_HOP_HEADERS.forEach((header) => delete headers[header]);
+  // Remplacer tout en-tête fourni par le client ; ne jamais lui rendre ce secret.
+  headers[INTERNAL_TOKEN_HEADER] = internalToken;
 
   const proxy = http.request({
     hostname: TRANSCRIPTION_HOST,
@@ -1152,7 +1143,10 @@ app.post("/api/meetings/audio-chunks-status", (req, res) => {
         .map((name) => Number(name.slice(6, 12))).sort((a, b) => a - b)
       : [];
     const manifest = fs.existsSync(chunksDir) ? readAudioChunkManifest(chunksDir) : null;
-    return res.json({ status: "ok", received, ...(manifest || {}) });
+    const chunks = received.map((index) => ({
+      index, ...audioFileDigest(path.join(chunksDir, `chunk_${String(index).padStart(6, "0")}.part`))
+    }));
+    return res.json({ status: "ok", received, chunks, ...(manifest || {}) });
   } catch (error) {
     return res.status(400).json({ error: error.message || "Impossible de lister les blocs audio." });
   }
@@ -1196,24 +1190,10 @@ app.post("/api/meetings/audio-chunks-finalize", (req, res) => {
       }
       // Accusé de réception perdu : une relance identique est sûre uniquement
       // si l'original correspond exactement à la concaténation des blocs.
-      const existing = fs.readFileSync(audioPath);
-      const totalBytes = paths.reduce((sum, filePath) => sum + fs.statSync(filePath).size, 0);
-      if (existing.length === totalBytes) {
-        let offset = 0;
-        let identical = true;
-        for (const filePath of paths) {
-          const block = fs.readFileSync(filePath);
-          if (!existing.subarray(offset, offset + block.length).equals(block)) {
-            identical = false;
-            break;
-          }
-          offset += block.length;
-        }
-        if (identical) {
-          return res.status(200).json({
-            status: "already-finalized", audioFileName, blocks: count, mimeType: manifest.mimeType
-          });
-        }
+      if (audioMatchesChunks(audioPath, paths)) {
+        return res.status(200).json({
+          status: "already-finalized", audioFileName, blocks: count, mimeType: manifest.mimeType
+        });
       }
       return res.status(409).json({ error: "Un audio original différent existe déjà. Il ne sera pas remplacé." });
     }
@@ -1222,7 +1202,7 @@ app.post("/api/meetings/audio-chunks-finalize", (req, res) => {
     try {
       const fd = fs.openSync(temporaryPath, "wx");
       try {
-        for (const filePath of paths) fs.writeFileSync(fd, fs.readFileSync(filePath));
+        for (const filePath of paths) appendAudioFile(fd, filePath);
         fs.fsyncSync(fd);
       } finally {
         fs.closeSync(fd);

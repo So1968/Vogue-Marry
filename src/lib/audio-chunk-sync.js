@@ -1,4 +1,4 @@
-import { pendingAudioChunks, clearFinalizedAudioChunks, forgetAudioSession } from "./audio-chunk-queue.js";
+import { pendingAudioChunks, clearFinalizedAudioChunks, forgetDurableAudioSession } from "./audio-chunk-queue.js";
 import { uploadMeetingAudioChunk, getMeetingAudioChunksStatus, finalizeMeetingAudioChunks } from "./local-api.js";
 import { createAudioSessionSynchronizer } from "./audio-session-sync-core.js";
 
@@ -6,7 +6,7 @@ import { createAudioSessionSynchronizer } from "./audio-session-sync-core.js";
 export const syncAudioSession = createAudioSessionSynchronizer({
   pendingAudioChunks,
   clearFinalizedAudioChunks,
-  forgetAudioSession,
+  forgetAudioSession: forgetDurableAudioSession,
   uploadMeetingAudioChunk,
   getMeetingAudioChunksStatus,
   finalizeMeetingAudioChunks

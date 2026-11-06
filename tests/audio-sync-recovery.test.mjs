@@ -1,4 +1,5 @@
 import test from "node:test";
+import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { createAudioSessionSynchronizer } from "../src/lib/audio-session-sync-core.js";
 
@@ -8,11 +9,17 @@ const session = {
 };
 const chunks = [0, 1, 2].map((index) => ({ index, blob: new Blob(["bloc-" + index]) }));
 
-function harness({ local = chunks, remote = [], finalized = "ok", failUpload = -1, failFinalize = false } = {}) {
+function harness({ local = chunks, remote = [], finalized = "ok", failUpload = -1, failFinalize = false, descriptors = true, corruptRemote = false } = {}) {
   const calls = { uploads: [], cleared: [], forgotten: [], finalized: 0 };
   const sync = createAudioSessionSynchronizer({
     pendingAudioChunks: async () => local,
-    getMeetingAudioChunksStatus: async () => ({ received: remote }),
+    getMeetingAudioChunksStatus: async () => ({
+      received: remote,
+      ...(descriptors ? { chunks: await Promise.all(local.filter((chunk) => remote.includes(chunk.index)).map(async (chunk) => ({
+        index: chunk.index, size: chunk.blob.size,
+        sha256: corruptRemote ? "0".repeat(64) : createHash("sha256").update(Buffer.from(await chunk.blob.arrayBuffer())).digest("hex")
+      }))) } : {})
+    }),
     uploadMeetingAudioChunk: async ({ index }) => {
       if (index === failUpload) throw new Error("Réseau interrompu");
       calls.uploads.push(index);
@@ -98,4 +105,38 @@ test("audio : perte d'un bloc sur 2160 conserve la copie et interdit la finalisa
   await assert.rejects(sync({ ...session, count }), /Confirmation indisponible/u);
   assert.deepEqual(calls.cleared, []);
   assert.deepEqual(calls.forgotten, []);
+});
+
+
+test("audio : un bloc distant différent interdit la finalisation et le nettoyage local", async () => {
+  const { sync, calls } = harness({ remote: [0, 1, 2], corruptRemote: true });
+  await assert.rejects(sync(session), /diffère de la copie locale/u);
+  assert.equal(calls.finalized, 0);
+  assert.deepEqual(calls.cleared, []);
+  assert.deepEqual(calls.forgotten, []);
+});
+
+test("audio : ancien serveur sans empreintes, comparaison par réenvoi idempotent", async () => {
+  const { sync, calls } = harness({ remote: [0, 1, 2], descriptors: false });
+  assert.equal((await sync(session)).status, "ok");
+  assert.deepEqual(calls.uploads, [0, 1, 2]);
+});
+
+test("audio : index local hors capture conserve tous les fragments", async () => {
+  const { sync, calls } = harness({ local: [...chunks, { index: 3, blob: new Blob(["extra"]) }] });
+  await assert.rejects(sync(session), /Fragments locaux invalides/u);
+  assert.equal(calls.finalized, 0);
+  assert.deepEqual(calls.cleared, []);
+});
+
+test("audio : attendre la confirmation durable du nettoyage de session", async () => {
+  let forgotten = false;
+  const sync = createAudioSessionSynchronizer({
+    pendingAudioChunks: async () => [], getMeetingAudioChunksStatus: async () => ({ received: [0, 1, 2] }),
+    uploadMeetingAudioChunk: async () => {}, finalizeMeetingAudioChunks: async () => ({ status: "already-finalized" }),
+    clearFinalizedAudioChunks: async () => {},
+    forgetAudioSession: async () => { await new Promise((resolve) => setTimeout(resolve, 5)); forgotten = true; }
+  });
+  await sync(session);
+  assert.equal(forgotten, true, "Ne pas annoncer le succès avant le reçu IndexedDB.");
 });

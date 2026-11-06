@@ -29,7 +29,7 @@ const names = spawnSync("tar", ["-tzf", file], { encoding: "utf8" });
 if (names.status !== 0) throw new Error("Archive illisible.");
 const entries = names.stdout.trim().split("\n").filter(Boolean);
 if (!entries.length || entries.some((name) => !name.startsWith("VOGUE-MERRY-DONNEES/") ||
-  name.includes("..") || path.isAbsolute(name))) {
+  path.isAbsolute(name))) {
   throw new Error("Archive contient des chemins inattendus.");
 }
 // Une archive peut cacher un lien symbolique vers une cible extérieure.

@@ -1,4 +1,5 @@
 import test from "node:test";
+import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
@@ -159,6 +160,10 @@ test("contrat Réunion : export, audio, journal, validation et protection des é
       projectName: "Île de contrat fictive", meetingDirName: chunkName
     });
     assert.deepEqual(state.data.received, [0, 2]);
+    assert.deepEqual(state.data.chunks, [0, 2].map((index) => ({
+      index, size: Buffer.byteLength(`bloc-${index}`),
+      sha256: createHash("sha256").update(`bloc-${index}`).digest("hex")
+    })));
     assert.equal(state.data.extension, ".webm");
     assert.equal(state.data.mimeType, "audio/webm");
     const missing = await json("/api/meetings/audio-chunks-finalize", {

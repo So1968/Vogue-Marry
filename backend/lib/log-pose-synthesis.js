@@ -17,6 +17,11 @@ function knowledgeReviewCounts(projectSlug, kind) {
   return { accepted, pending };
 }
 
+function comparePriorityActions(a, b) {
+  const statusRank = (value) => normalizeKnowledgeText(value) === "en cours" ? 0 : 1;
+  return statusRank(a.statut) - statusRank(b.statut) || String(a.date || "").localeCompare(String(b.date || ""));
+}
+
 function buildLogPose(projectSlug, manual = readLogPoseManual(projectSlug)) {
   const meetings = listProjectMeetings(projectSlug);
   const { accepted: decisions, pending: pendingDecisions } = knowledgeReviewCounts(projectSlug, "decision");
@@ -26,10 +31,7 @@ function buildLogPose(projectSlug, manual = readLogPoseManual(projectSlug)) {
   const latestDecision = orderedDecisions[0] || null;
   const priorityActions = actions
     .filter((item) => !isClosedKnowledgeStatus(item.statut))
-    .sort((a, b) => {
-      const statusRank = (value) => normalizeKnowledgeText(value) === "en cours" ? 0 : 1;
-      return statusRank(a.statut) - statusRank(b.statut) || String(a.date || "").localeCompare(String(b.date || ""));
-    })
+    .sort(comparePriorityActions)
     .slice(0, 5);
   const priorityNeeds = needs
     .filter((item) => !isClosedKnowledgeStatus(item.statut))
@@ -88,9 +90,11 @@ function buildGlobalLogPose(projectSlugs) {
     .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
   const priorityActions = projectSnapshots
     .flatMap((snapshot) => snapshot.priorityActions.map((item) => ({ ...item, projectName: snapshot.projectName })))
+    .sort(comparePriorityActions)
     .slice(0, 5);
   const priorityNeeds = projectSnapshots
     .flatMap((snapshot) => (snapshot.priorityNeeds || []).map((item) => ({ ...item, projectName: snapshot.projectName })))
+    .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))
     .slice(0, 5);
   const pendingReview = projectSnapshots.reduce((total, snapshot) => ({
     actions: total.actions + snapshot.pendingReview.actions,

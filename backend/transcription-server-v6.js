@@ -1,3 +1,4 @@
+import { createDataPath } from "./lib/path-guards.js";
 import { localPythonPath, pythonProcessEnv } from "./lib/runtime-paths.js";
 import { protectWindowsPrivatePath } from "./lib/windows-private-path.js";
 import { mapSpeakersFromIntroductions } from "./lib/speaker-identification.js";
@@ -21,8 +22,9 @@ const app = express();
 const PORT = Number(process.env.VOGUE_TRANSCRIPTION_PORT || 8011);
 const HOME = os.homedir();
 const DATA_ROOT = path.join(HOME, "VOGUE-MERRY-DONNEES");
-const ROOT = path.join(DATA_ROOT, "99_TRANSCRIPTION_TESTS");
-const PROJECTS_ROOT = path.join(DATA_ROOT, "01_PROJETS");
+const memoryPath = createDataPath(DATA_ROOT, ["01_PROJETS", "99_TRANSCRIPTION_TESTS"]);
+const ROOT = memoryPath(DATA_ROOT, "99_TRANSCRIPTION_TESTS");
+const PROJECTS_ROOT = memoryPath(DATA_ROOT, "01_PROJETS");
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const LOCAL_PYTHON = localPythonPath(PROJECT_ROOT);
 const LOCAL_SCRIPT = path.join(PROJECT_ROOT, "backend", "local_transcribe.py");
@@ -91,7 +93,7 @@ function timestamp() {
 }
 
 function jobDir(jobId) {
-  return path.join(ROOT, jobId);
+  return memoryPath(ROOT, jobId);
 }
 
 function requestJobDir(jobId) {
@@ -99,11 +101,12 @@ function requestJobDir(jobId) {
   if (!/^[A-Za-z0-9._-]+$/.test(value) || value === "." || value === "..") return null;
   const resolved = path.resolve(ROOT, value);
   const root = path.resolve(ROOT) + path.sep;
-  return resolved.startsWith(root) ? resolved : null;
+  if (!resolved.startsWith(root)) return null;
+  try { return memoryPath(resolved); } catch { return null; }
 }
 
 function statusPath(jobId) {
-  return path.join(jobDir(jobId), "status.json");
+  return memoryPath(jobDir(jobId), "status.json");
 }
 
 function writeJson(filePath, value) {
@@ -275,15 +278,15 @@ function scanEscales() {
   const escales = [];
   for (const projectEntry of fs.readdirSync(PROJECTS_ROOT, { withFileTypes: true })) {
     if (!projectEntry.isDirectory()) continue;
-    const meetingsRoot = path.join(PROJECTS_ROOT, projectEntry.name, "01_escales_reunions");
+    const meetingsRoot = memoryPath(PROJECTS_ROOT, projectEntry.name, "01_escales_reunions");
     if (!fs.existsSync(meetingsRoot)) continue;
     for (const meetingEntry of fs.readdirSync(meetingsRoot, { withFileTypes: true })) {
       if (!meetingEntry.isDirectory()) continue;
-      const dataPath = path.join(meetingsRoot, meetingEntry.name, "donnees_escale.json");
+      const dataPath = memoryPath(meetingsRoot, meetingEntry.name, "donnees_escale.json");
       const data = readJsonIfExists(dataPath);
       if (!data) continue;
       const participants = parseParticipants(data.participants || data.presents || data.presentParticipants || []);
-      const originalAudio = fs.readdirSync(path.join(meetingsRoot, meetingEntry.name))
+      const originalAudio = fs.readdirSync(memoryPath(meetingsRoot, meetingEntry.name))
         .filter((name) => /^audio_original[.](webm|ogg|wav|mp3|m4a|mp4|flac)$/iu.test(name));
       escales.push({
         audioFileName: originalAudio.length === 1 ? originalAudio[0] : null,
@@ -556,7 +559,7 @@ async function verifyWithGpt(jobId, sourcePath, duration, localSegments, context
     cursor += SENSITIVE_CHUNK_SECONDS - OVERLAP_SECONDS;
   }
 
-  const verificationDir = path.join(jobDir(jobId), "verification");
+  const verificationDir = memoryPath(jobDir(jobId), "verification");
   fs.mkdirSync(verificationDir, { recursive: true });
   const chunks = [];
   let processedSeconds = 0;
@@ -565,7 +568,7 @@ async function verifyWithGpt(jobId, sourcePath, duration, localSegments, context
     const start = starts[index];
     const chunkDuration = Math.min(SENSITIVE_CHUNK_SECONDS, duration - start);
     const chunkNumber = index + 1;
-    const chunkPath = path.join(jobDir(jobId), `gpt_chunk_${String(chunkNumber).padStart(2, "0")}.mp3`);
+    const chunkPath = memoryPath(jobDir(jobId), `gpt_chunk_${String(chunkNumber).padStart(2, "0")}.mp3`);
     writeStatus(jobId, {
       state: "verifying",
       message: `Vérification GPT ${chunkNumber}/${starts.length}…`,
@@ -575,7 +578,7 @@ async function verifyWithGpt(jobId, sourcePath, duration, localSegments, context
     });
     await makeSensitiveChunk(sourcePath, chunkPath, start, chunkDuration);
     const primary = await transcribePrimary(key, chunkPath, context, participants, meeting);
-    writeJson(path.join(verificationDir, `tranche_${String(chunkNumber).padStart(2, "0")}_gpt.json`), primary);
+    writeJson(memoryPath(verificationDir, `tranche_${String(chunkNumber).padStart(2, "0")}_gpt.json`), primary);
     const gptText = String(primary?.text || "").trim();
     const localText = localTextForRange(localSegments, start, start + chunkDuration);
     const similarity = textSimilarity(localText, gptText);
@@ -666,13 +669,13 @@ async function processJob(jobId, sourcePath, originalName, mode, context, partic
     if (!duration) throw new Error("Impossible de déterminer la durée de l'enregistrement.");
 
     const local = await transcribeLocal(jobId, sourcePath, 5, mode === "high" ? 48 : 58);
-    writeJson(path.join(jobDir(jobId), "transcription_locale_brute.json"), local);
+    writeJson(memoryPath(jobDir(jobId), "transcription_locale_brute.json"), local);
 
     let diarization = [];
     if (pyannoteInstalled() && hfToken()) {
       try {
         diarization = await diarizeLocal(jobId, sourcePath, participants.length, mode === "high" ? 50 : 62, mode === "high" ? 72 : 92);
-        writeJson(path.join(jobDir(jobId), "diarisation_locale.json"), diarization);
+        writeJson(memoryPath(jobDir(jobId), "diarisation_locale.json"), diarization);
       } catch (error) {
         warnings.push(`Repérage local des interlocuteurs indisponible : ${error.message}`);
       }
@@ -695,7 +698,7 @@ async function processJob(jobId, sourcePath, originalName, mode, context, partic
     let verification = null;
     if (mode === "high") {
       verification = await verifyWithGpt(jobId, sourcePath, duration, local.segments, context, participants, meeting, 74);
-      writeJson(path.join(jobDir(jobId), "verification_gpt.json"), verification);
+      writeJson(memoryPath(jobDir(jobId), "verification_gpt.json"), verification);
       const review = verification.chunks.filter((chunk) => chunk.needsReview);
       if (review.length) warnings.push(`${review.length} tranche${review.length > 1 ? "s" : ""} à vérifier : les deux moteurs divergent sensiblement.`);
     }
@@ -727,15 +730,15 @@ async function processJob(jobId, sourcePath, originalName, mode, context, partic
     };
 
     const resultDir = jobDir(jobId);
-    writeJson(path.join(resultDir, "transcription.json"), result);
+    writeJson(memoryPath(resultDir, "transcription.json"), result);
     preserveOriginalTranscript(resultDir);
     const meetingDataPath = speakerMeetingDataPath(result.meeting?.id || "");
     snapshotTranscript({ dir: resultDir, meetingDir: meetingDataPath ? path.dirname(meetingDataPath) : null,
       reason: "integration-transcription" });
     persistTranscriptionToMeeting(result);
-    writeJson(path.join(resultDir, "transcription.json"), result);
+    writeJson(memoryPath(resultDir, "transcription.json"), result);
     fs.writeFileSync(
-      path.join(jobDir(jobId), "transcription.md"),
+      memoryPath(jobDir(jobId), "transcription.md"),
       buildTranscriptMarkdown({
         originalName,
         duration,
@@ -751,7 +754,7 @@ async function processJob(jobId, sourcePath, originalName, mode, context, partic
     );
 
     if (verification) {
-      fs.writeFileSync(path.join(jobDir(jobId), "verification-gpt.md"), buildVerificationMarkdown({ originalName, duration }, verification), "utf8");
+      fs.writeFileSync(memoryPath(jobDir(jobId), "verification-gpt.md"), buildVerificationMarkdown({ originalName, duration }, verification), "utf8");
     }
 
     writeStatus(jobId, {
@@ -787,7 +790,7 @@ function findReusableJob(cacheKey) {
   for (const entry of entries) {
     const status = readJsonIfExists(statusPath(entry.name));
     if (!status || !reusableStates.has(status.state) || status.cacheKey !== cacheKey) continue;
-    if (status.state === "done" && !fs.existsSync(path.join(jobDir(entry.name), "transcription.json"))) continue;
+    if (status.state === "done" && !fs.existsSync(memoryPath(jobDir(entry.name), "transcription.json"))) continue;
     return { jobId: entry.name, state: status.state };
   }
   return null;
@@ -796,9 +799,11 @@ function findReusableJob(cacheKey) {
 const upload = multer({
   storage: multer.diskStorage({
     destination(req, file, cb) {
-      const tempDir = path.join(ROOT, "_uploads");
-      fs.mkdirSync(tempDir, { recursive: true });
-      cb(null, tempDir);
+      try {
+        const tempDir = memoryPath(ROOT, "_uploads");
+        fs.mkdirSync(tempDir, { recursive: true });
+        cb(null, tempDir);
+      } catch (error) { cb(error); }
     },
     filename(req, file, cb) {
       cb(null, `${Date.now()}_${randomUUID()}_${safeName(file.originalname)}`);
@@ -818,7 +823,8 @@ function speakerMeetingDataPath(meetingId) {
   if ([projectSlug, meetingDir].some((part) => part === "." || part === "..")) return null;
   const resolved = path.resolve(PROJECTS_ROOT, projectSlug, "01_escales_reunions", meetingDir, "donnees_escale.json");
   const root = path.resolve(PROJECTS_ROOT) + path.sep;
-  return resolved.startsWith(root) ? resolved : null;
+  if (!resolved.startsWith(root)) return null;
+  try { return memoryPath(resolved); } catch { return null; }
 }
 
 function cleanSpeakerMapping(mapping, participants, segments) {
@@ -935,9 +941,9 @@ function persistTranscriptionToMeeting(result) {
 
   try {
     const meetingDir = path.dirname(dataPath);
-    const transcriptionJsonPath = path.join(meetingDir, "transcription_v6.json");
-    const transcriptionMarkdownPath = path.join(meetingDir, "transcription_v6.md");
-    const journalPath = path.join(meetingDir, "journal_de_bord_exporte.md");
+    const transcriptionJsonPath = memoryPath(meetingDir, "transcription_v6.json");
+    const transcriptionMarkdownPath = memoryPath(meetingDir, "transcription_v6.md");
+    const journalPath = memoryPath(meetingDir, "journal_de_bord_exporte.md");
 
     writeJson(transcriptionJsonPath, result);
     atomicWriteText(transcriptionMarkdownPath, buildCorrectedTranscriptMarkdown(result));
@@ -996,8 +1002,8 @@ app.post("/api/transcription/:jobId/speakers", (req, res) => {
     const dir = requestJobDir(req.params.jobId);
     if (!dir) return res.status(400).json({ error: "Identifiant de transcription invalide." });
 
-    const resultPath = path.join(dir, "transcription.json");
-    const jobStatusPath = path.join(dir, "status.json");
+    const resultPath = memoryPath(dir, "transcription.json");
+    const jobStatusPath = memoryPath(dir, "status.json");
     if (!fs.existsSync(resultPath)) return res.status(404).json({ error: "Transcription introuvable ou inachevée." });
 
     const result = readJson(resultPath);
@@ -1034,7 +1040,7 @@ app.post("/api/transcription/:jobId/speakers", (req, res) => {
     result.text = result.segments.map((segment) => `${segment.speaker || "Intervenant"} — ${segment.text || ""}`).join("\n");
 
     writeJson(resultPath, result);
-    atomicWriteText(path.join(dir, "transcription.md"), buildCorrectedTranscriptMarkdown(result));
+    atomicWriteText(memoryPath(dir, "transcription.md"), buildCorrectedTranscriptMarkdown(result));
 
     const persistedToMeeting = persistSpeakerMappingToMeeting(result, status, mergedOverrides, updatedAt);
     persistTranscriptionToMeeting(result);
@@ -1106,7 +1112,7 @@ app.get("/api/transcription/escales/:projectSlug/:meetingDirName/audio", (req, r
     if (originals.length !== 1) {
       return res.status(409).json({ error: "Audio original absent ou ambigu. Vérification nécessaire." });
     }
-    const audioPath = path.join(meetingDir, originals[0]);
+    const audioPath = memoryPath(meetingDir, originals[0]);
     if (!fs.lstatSync(audioPath).isFile()) {
       return res.status(409).json({ error: "Le fichier audio original n'est pas un fichier régulier." });
     }
@@ -1178,7 +1184,7 @@ app.post("/api/transcription", upload.single("audio"), async (req, res) => {
     const dir = jobDir(jobId);
     fs.mkdirSync(dir, { recursive: true });
     const extension = path.extname(req.file.originalname || "") || ".audio";
-    const sourcePath = path.join(dir, `audio_original${extension}`);
+    const sourcePath = memoryPath(dir, `audio_original${extension}`);
     fs.renameSync(req.file.path, sourcePath);
 
     writeStatus(jobId, {
@@ -1210,7 +1216,7 @@ app.post("/api/transcription", upload.single("audio"), async (req, res) => {
 app.get("/api/transcription/:jobId", (req, res) => {
   const dir = requestJobDir(req.params.jobId);
   if (!dir) return res.status(400).json({ error: "Identifiant de transcription invalide." });
-  const filePath = path.join(dir, "status.json");
+  const filePath = memoryPath(dir, "status.json");
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Transcription inconnue." });
   return res.json(readJson(filePath));
 });
@@ -1218,7 +1224,7 @@ app.get("/api/transcription/:jobId", (req, res) => {
 app.get("/api/transcription/:jobId/result", (req, res) => {
   const dir = requestJobDir(req.params.jobId);
   if (!dir) return res.status(400).json({ error: "Identifiant de transcription invalide." });
-  const filePath = path.join(dir, "transcription.json");
+  const filePath = memoryPath(dir, "transcription.json");
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Résultat pas encore disponible." });
   return res.json(readJson(filePath));
 });
@@ -1226,7 +1232,7 @@ app.get("/api/transcription/:jobId/result", (req, res) => {
 app.get("/api/transcription/:jobId/download", (req, res) => {
   const dir = requestJobDir(req.params.jobId);
   if (!dir) return res.status(400).json({ error: "Identifiant de transcription invalide." });
-  const filePath = path.join(dir, "transcription.md");
+  const filePath = memoryPath(dir, "transcription.md");
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Résultat pas encore disponible." });
   return res.download(filePath, "transcription-vogue-marry.md");
 });
@@ -1234,9 +1240,16 @@ app.get("/api/transcription/:jobId/download", (req, res) => {
 app.get("/api/transcription/:jobId/download-verification", (req, res) => {
   const dir = requestJobDir(req.params.jobId);
   if (!dir) return res.status(400).json({ error: "Identifiant de transcription invalide." });
-  const filePath = path.join(dir, "verification-gpt.md");
+  const filePath = memoryPath(dir, "verification-gpt.md");
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Vérification GPT indisponible pour cette transcription." });
   return res.download(filePath, "verification-gpt-vogue-marry.md");
+});
+
+app.use((error, _req, res, next) => {
+  if (error.code === "VOGUE_PATH_OUTSIDE_ROOT") {
+    return res.status(400).json({ error: error.message });
+  }
+  return next(error);
 });
 
 app.listen(PORT, "127.0.0.1", () => {

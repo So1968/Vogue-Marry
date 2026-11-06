@@ -52,6 +52,21 @@ test("Windows natif : Python dans un chemin avec espaces et services locaux avec
       body: JSON.stringify({ name: "Île Windows fictive", description: "Recette synthétique" }) });
     assert.equal(create.status, 201, await create.text());
     assert.ok(fs.existsSync(path.join(home, "VOGUE-MERRY-DONNEES", "01_PROJETS", "ile_windows_fictive")));
+    const outside = path.join(home, "Hors memoire fictif", "01_escales_reunions", "escale_fictive");
+    fs.mkdirSync(outside, { recursive: true });
+    const outsideReport = path.join(outside, "journal_de_bord_exporte.md");
+    fs.writeFileSync(outsideReport, "ORIGINAL_WINDOWS_FICTIF_HORS_RACINE");
+    fs.symlinkSync(path.join(home, "Hors memoire fictif"),
+      path.join(home, "VOGUE-MERRY-DONNEES", "01_PROJETS", "ile_liee_fictive"), "junction");
+    for (const route of ["read-report", "save-report", "validate"]) {
+      const denied = await fetch(api + "/api/meetings/" + route, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ projectSlug: "ile_liee_fictive", meetingDirName: "escale_fictive", content: "NE_PAS_ECRIRE" })
+      });
+      assert.equal(denied.status, 400);
+      assert.ok(!(await denied.text()).includes("ORIGINAL_WINDOWS_FICTIF_HORS_RACINE"));
+    }
+    assert.equal(fs.readFileSync(outsideReport, "utf8"), "ORIGINAL_WINDOWS_FICTIF_HORS_RACINE");
     const token = path.join(home, ".config", "vogue-merry", "internal_api_token");
     assert.ok(fs.existsSync(token));
     // Contrôler les SID autorisés sans afficher leurs valeurs ni le secret.

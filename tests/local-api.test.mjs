@@ -996,3 +996,85 @@ test("mémoire projet : escale → résultat synthétique → journal relu → v
     assert.equal(fs.readFileSync(path.join(projectDir, "01_escales_reunions", meetingDirName, "audio_original.webm"), "utf8"), "AUDIO_FICTIF_NON_DECODABLE");
   });
 });
+
+test("API mémoire : refus des liens externes pour les journaux, fragments et Log Pose", async () => {
+  await withServer("backend/server.js", 8010, async (home) => {
+    const api = async (route, body) => {
+      const response = await fetch("http://127.0.0.1:8010" + route, body ? {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+      } : {});
+      return { status: response.status, text: await response.text() };
+    };
+    const outside = path.join(home, "hors-memoire-fictif");
+    const outsideMeeting = path.join(outside, "01_escales_reunions", "escale_fictive");
+    fs.mkdirSync(outsideMeeting, { recursive: true });
+    const original = path.join(outsideMeeting, "journal_de_bord_exporte.md");
+    fs.writeFileSync(original, "ORIGINAL_FICTIF_HORS_RACINE");
+    const projects = path.join(home, "VOGUE-MERRY-DONNEES", "01_PROJETS");
+    fs.mkdirSync(projects, { recursive: true });
+    fs.symlinkSync(outside, path.join(projects, "ile_liee"), "dir");
+    const linked = { projectSlug: "ile_liee", meetingDirName: "escale_fictive" };
+    for (const route of ["read-report", "save-report", "validate"]) {
+      const result = await api("/api/meetings/" + route, { ...linked, content: "NE_PAS_ECRIRE" });
+      assert.equal(result.status, 400, route);
+      assert.ok(!result.text.includes(outside));
+      assert.ok(!result.text.includes("ORIGINAL_FICTIF_HORS_RACINE"));
+    }
+    assert.equal(fs.readFileSync(original, "utf8"), "ORIGINAL_FICTIF_HORS_RACINE");
+    await api("/api/projects", { name: "Projet audit fictif" });
+    const exported = await api("/api/meetings/export", { projectName: "Projet audit fictif", title: "Escale audit fictive" });
+    assert.equal(exported.status, 201, exported.text);
+    const data = JSON.parse(exported.text);
+    const coordinates = { projectSlug: data.projectSlug, meetingDirName: data.meetingDirName };
+    const meeting = path.join(projects, data.projectSlug, "01_escales_reunions", data.meetingDirName);
+    fs.renameSync(path.join(meeting, "journal_de_bord_exporte.md"), path.join(meeting, "journal_original_fictif.md"));
+    fs.symlinkSync(original, path.join(meeting, "journal_de_bord_exporte.md"));
+    assert.equal((await api("/api/meetings/read-report", coordinates)).status, 400);
+    assert.equal((await api("/api/meetings/save-report", { ...coordinates, content: "NE_PAS_ECRIRE" })).status, 400);
+    assert.equal(fs.readFileSync(original, "utf8"), "ORIGINAL_FICTIF_HORS_RACINE");
+    fs.symlinkSync(outside, path.join(meeting, "audio_chunks"), "dir");
+    assert.equal((await api("/api/meetings/audio-chunks-status", {
+      projectName: "Projet audit fictif", meetingDirName: data.meetingDirName
+    })).status, 400);
+    const logFile = path.join(projects, data.projectSlug, "10_log_pose", "log_pose.json");
+    const outsideJson = path.join(outside, "log_pose_fictif.json");
+    fs.writeFileSync(outsideJson, '{"whatToRemember":"DONNEE_FICTIVE_HORS_RACINE"}');
+    fs.renameSync(logFile, logFile + ".original-fictif");
+    fs.symlinkSync(outsideJson, logFile);
+    const logRead = await api(`/api/log-pose?projectSlug=${data.projectSlug}`);
+    assert.equal(logRead.status, 400);
+    assert.ok(!logRead.text.includes("DONNEE_FICTIVE_HORS_RACINE"));
+    assert.equal((await api("/api/log-pose/save", { projectSlug: data.projectSlug, whatToRemember: "NE_PAS_ECRIRE" })).status, 400);
+    assert.equal(fs.readFileSync(outsideJson, "utf8"), '{"whatToRemember":"DONNEE_FICTIVE_HORS_RACINE"}');
+  });
+});
+
+test("API transcription : refuse un job ou un résultat lié hors mémoire", async () => {
+  await withUnifiedServer(async (home) => {
+    const root = path.join(home, "VOGUE-MERRY-DONNEES", "99_TRANSCRIPTION_TESTS");
+    const outside = path.join(home, "transcription-exterieure-fictive");
+    fs.mkdirSync(outside);
+    const result = path.join(outside, "transcription.json");
+    fs.writeFileSync(result, '{"text":"TRANSCRIPTION_FICTIVE_HORS_RACINE"}');
+    fs.writeFileSync(path.join(outside, "status.json"), '{"state":"done"}');
+    fs.symlinkSync(outside, path.join(root, "job_lie_fictif"), "dir");
+    const regular = path.join(root, "job_regulier_fictif"); fs.mkdirSync(regular);
+    fs.symlinkSync(result, path.join(regular, "transcription.json"));
+    for (const route of ["job_lie_fictif", "job_lie_fictif/result", "job_regulier_fictif/result"]) {
+      const response = await fetch("http://127.0.0.1:8010/api/transcription/" + route);
+      assert.equal(response.status, 400, route);
+      const text = await response.text();
+      assert.ok(!text.includes(outside));
+      assert.ok(!text.includes("TRANSCRIPTION_FICTIVE_HORS_RACINE"));
+    }
+    const beforeFiles = fs.readdirSync(outside);
+    fs.symlinkSync(outside, path.join(root, "_uploads"), "dir");
+    const form = new FormData();
+    form.append("audio", new Blob(["AUDIO_SYNTHETIQUE"], { type: "audio/webm" }), "fictif.webm");
+    const upload = await fetch("http://127.0.0.1:8010/api/transcription", { method: "POST", body: form });
+    assert.equal(upload.status, 400);
+    assert.deepEqual(fs.readdirSync(outside), beforeFiles);
+    assert.equal((await fetch("http://127.0.0.1:8010/api/transcription/escales")).status, 200, "Le refus ne doit pas arrêter le moteur.");
+    assert.equal(fs.readFileSync(result, "utf8"), '{"text":"TRANSCRIPTION_FICTIVE_HORS_RACINE"}');
+  });
+});

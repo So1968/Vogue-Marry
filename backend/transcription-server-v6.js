@@ -994,7 +994,8 @@ app.post("/api/transcription/:jobId/speakers", (req, res) => {
     if (!Object.keys(mapping).length) return res.status(400).json({ error: "Aucune correspondance d'interlocuteur valide." });
 
     const mergedOverrides = { ...(result.speakerOverrides || {}), ...mapping };
-    if (Object.entries(mapping).every(([source, name]) => result.speakerOverrides?.[source] === name)) {
+    if (Object.entries(mapping).every(([source, name]) => result.speakerOverrides?.[source] === name) &&
+        (!result.meeting?.id || result.persistedToMeeting)) {
       return res.json({ status: "ok", persistedToMeeting: Boolean(result.persistedToMeeting),
         mapping: mergedOverrides, unresolvedSpeakers: result.unresolvedSpeakers || [], result });
     }

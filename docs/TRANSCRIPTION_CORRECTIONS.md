@@ -29,7 +29,9 @@ sur tous les fichiers. Après une interruption entre deux publications, l'histor
 conserve l'état antérieur pour examen et récupération.
 
 La répétition d'une correspondance déjà enregistrée est idempotente : aucun nouvel
-historique ni horodatage. Une correspondance vers une voix absente du résultat
+historique ni horodatage après une publication complète. Si la publication vers
+l'escale était incomplète, la même confirmation retente cette publication en
+conservant un nouvel état antérieur. Une correspondance vers une voix absente du résultat
 est refusée. Le journal validé n'est pas réécrit. Un texte humain modifié dans la
 section gérée du journal exporté peut être remplacé lors de la mise à jour, mais
 sa version antérieure est désormais conservée dans le snapshot de l'escale.

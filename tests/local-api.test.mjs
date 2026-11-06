@@ -921,13 +921,19 @@ test("transcription : corrections historisées, origine conservée et répétiti
     assert.equal(fs.readFileSync(path.join(dir, "transcription_locale_brute.json"), "utf8"), "ORIGINAL_TECHNIQUE_FICTIF");
     assert.equal(fs.readFileSync(path.join(dir, "audio_original.webm"), "utf8"), "AUDIO_FICTIF");
     assert.equal(fs.readFileSync(path.join(meetingDir, "journal_de_bord_valide.md"), "utf8"), "JOURNAL_VALIDE_FICTIF");
+    // Une publication partielle ne doit pas être bloquée par l'idempotence des noms.
+    const interrupted = JSON.parse(fs.readFileSync(path.join(dir, "transcription.json"), "utf8"));
+    interrupted.persistedToMeeting = false;
+    fs.writeFileSync(path.join(dir, "transcription.json"), JSON.stringify(interrupted));
+    assert.equal((await confirm({ SPEAKER_00: "Voix fictive B" })).data.result.persistedToMeeting, true);
+    assert.equal(versions().length, 3);
     // Si l'historique ne peut pas être copié, refuser avant toute correction.
     fs.unlinkSync(path.join(meetingDir, "journal_de_bord_exporte.md"));
     fs.symlinkSync(path.join(dir, "transcription_locale_brute.json"), path.join(meetingDir, "journal_de_bord_exporte.md"));
     const beforeFailure = fs.readFileSync(path.join(dir, "transcription.json"), "utf8");
     assert.equal((await confirm({ SPEAKER_00: "Voix fictive A" })).status, 500);
     assert.equal(fs.readFileSync(path.join(dir, "transcription.json"), "utf8"), beforeFailure);
-    assert.equal(versions().length, 2);
+    assert.equal(versions().length, 3);
   });
 });
 

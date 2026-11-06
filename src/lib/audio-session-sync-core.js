@@ -49,7 +49,7 @@ export function createAudioSessionSynchronizer({
       throw new Error("La finalisation audio n'est pas confirmée.");
     }
     await clearFinalizedAudioChunks(sessionId);
-    forgetAudioSession(sessionId);
+    await forgetAudioSession(sessionId);
     return result;
   };
 }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import MeetingMode from "../../components/MeetingMode.jsx";
 import { exportMeeting, saveMeetingMarkers, uploadMeetingAudioChunk } from "../../lib/local-api.js";
-import { keepAudioChunk, getAudioChunk, pendingAudioChunks, rememberAudioSession, recoverAudioSession } from "../../lib/audio-chunk-queue.js";
+import { keepCapturedAudioChunk, getAudioChunk, pendingAudioChunks, rememberDurableAudioSession, recoverDurableAudioSession, forgetDurableAudioSession, recoverAudioSession } from "../../lib/audio-chunk-queue.js";
 import { preparePartialAudioExport } from "../../lib/audio-partial-recovery.js";
 import { syncAudioSession } from "../../lib/audio-chunk-sync.js";
 import { keepLocalMarkers, recoverLocalMarkers, clearLocalMarkers } from "../../lib/meeting-marker-backup.js";
@@ -56,9 +56,17 @@ export default function MeetingModePanel({ projects, onSaved }) {
   }, [projectSlug, projects]);
 
   useEffect(() => {
-    const refreshRecoverableSession = () => setRecoverableSession(recoverAudioSession());
+    let current = true;
+    const refreshRecoverableSession = () => {
+      recoverDurableAudioSession().then((session) => {
+        if (current) setRecoverableSession(session);
+      }).catch((storageError) => {
+        if (current) setError("Récupération audio locale indisponible : " + storageError.message);
+      });
+    };
+    refreshRecoverableSession();
     window.addEventListener("storage", refreshRecoverableSession);
-    return () => window.removeEventListener("storage", refreshRecoverableSession);
+    return () => { current = false; window.removeEventListener("storage", refreshRecoverableSession); };
   }, []);
 
   useEffect(() => {
@@ -115,7 +123,11 @@ export default function MeetingModePanel({ projects, onSaved }) {
       setError("Donnez un titre à cette escale avant de démarrer.");
       return;
     }
-    const liveSession = recoverAudioSession();
+    let liveSession;
+    try { liveSession = await recoverDurableAudioSession(); } catch (storageError) {
+      setError("Vérification du stockage audio impossible : " + storageError.message);
+      return;
+    }
     if (recoverableSession || liveSession?.sessionId) {
       if (liveSession?.sessionId) setRecoverableSession(liveSession);
       setError("Une réunion précédente reste à récupérer. Terminez d'abord sa sauvegarde.");
@@ -143,12 +155,21 @@ export default function MeetingModePanel({ projects, onSaved }) {
         context: context.trim(),
         rawNotes: JSON.stringify(markersRef.current)
       });
+      if (!mountedRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
       const session = {
         sessionId: crypto.randomUUID(), projectName: selectedProject.name,
         projectSlug: meeting.projectSlug,
         meetingDirName: meeting.meetingDirName, count: 0, finalizedCapture: false
       };
-      rememberAudioSession(session);
+      await rememberDurableAudioSession(session);
+      if (!mountedRef.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        await forgetDurableAudioSession(session.sessionId);
+        return;
+      }
       activeSessionRef.current = session;
       markerWritesRef.current = Promise.resolve();
       markerErrorRef.current = null;
@@ -162,11 +183,11 @@ export default function MeetingModePanel({ projects, onSaved }) {
         if (!event.data.size) return;
         const index = session.count;
         session.count += 1;
-        rememberAudioSession(session);
         writesRef.current = writesRef.current
           .then(async () => {
-            if (chunkWriteErrorRef.current) return;
-            await keepAudioChunk(session.sessionId, index, event.data);
+            // Même après une erreur, tenter de conserver le dernier événement
+            // émis par MediaRecorder.stop(), sans abandonner sa copie locale.
+            await keepCapturedAudioChunk(session, index, event.data);
             // Le bloc est d'abord durable dans IndexedDB ; l'envoi n'efface jamais cette copie.
             // Les envois sont ordonnés et une panne réseau ne stoppe pas la capture.
             uploadsRef.current = uploadsRef.current
@@ -211,7 +232,7 @@ export default function MeetingModePanel({ projects, onSaved }) {
           // L'audio est récupérable dès que le dernier bloc est stocké localement.
           // Une panne du serveur de marqueurs ne doit pas le laisser « incomplet ».
           session.finalizedCapture = true;
-          rememberAudioSession(session);
+          await rememberDurableAudioSession(session);
           await markerWritesRef.current;
           await savePendingMarkers(session);
           await uploadsRef.current;

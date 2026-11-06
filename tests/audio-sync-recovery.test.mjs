@@ -128,3 +128,15 @@ test("audio : index local hors capture conserve tous les fragments", async () =>
   assert.equal(calls.finalized, 0);
   assert.deepEqual(calls.cleared, []);
 });
+
+test("audio : attendre la confirmation durable du nettoyage de session", async () => {
+  let forgotten = false;
+  const sync = createAudioSessionSynchronizer({
+    pendingAudioChunks: async () => [], getMeetingAudioChunksStatus: async () => ({ received: [0, 1, 2] }),
+    uploadMeetingAudioChunk: async () => {}, finalizeMeetingAudioChunks: async () => ({ status: "already-finalized" }),
+    clearFinalizedAudioChunks: async () => {},
+    forgetAudioSession: async () => { await new Promise((resolve) => setTimeout(resolve, 5)); forgotten = true; }
+  });
+  await sync(session);
+  assert.equal(forgotten, true, "Ne pas annoncer le succès avant le reçu IndexedDB.");
+});

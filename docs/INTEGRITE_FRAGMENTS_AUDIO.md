@@ -26,3 +26,31 @@ peut retarder d'autres requêtes pendant le contrôle. La simulation logique de
 2 160 blocs couvre trois heures à cinq secondes par bloc ; elle ne représente
 pas trois heures de microphone ni une recette du poste utilisateur. La recette
 Firefox synthétique et les tests de décodage sont rapportés séparément.
+
+## Métadonnées durables du navigateur
+
+La base IndexedDB passe de la version 1 à la version 2, sans effacer le magasin
+historique des fragments. Elle contient désormais les sessions. L'écriture d'un
+fragment et l'avancement de son compteur se font dans la même transaction.
+Le compteur reflète donc le dernier fragment validé, même si des événements plus
+récents sont déjà en attente en mémoire.
+
+`localStorage` reste un miroir de compatibilité, mais son refus ou son quota
+n'interrompt plus l'écriture d'un fragment dans IndexedDB. Au chargement et avant
+une nouvelle capture, l'interface cherche une session dans la base durable.
+Une session historique n'existant que dans localStorage reste récupérable.
+Après une erreur d'écriture, la capture est arrêtée, mais le dernier événement
+émis par MediaRecorder.stop() fait encore l'objet d'une tentative de conservation.
+Une transaction avortée n'autorise pas l'avancement du compteur.
+
+La fin de capture est persistée avant la synchronisation. Le nettoyage après
+confirmation serveur attend un reçu durable minimal. Ce reçu empêche un vieux
+miroir localStorage impossible à supprimer de réactiver une réunion finalisée.
+Les reçus ne contiennent plus le contexte de la réunion, uniquement son identifiant
+technique et la date du reçu. Ne pas vider les données du navigateur tant qu'une
+récupération reste en attente. Fermer les anciens onglets puis recharger lors du
+passage à la nouvelle version de la base.
+
+Les tests de transactions utilisent fake-indexeddb et des Blob synthétiques :
+ils ne remplacent pas la recette Firefox sur un vrai profil navigateur, ni les
+pannes physiques de disque, ni les garanties de durabilité du système d'exploitation.

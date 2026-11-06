@@ -6,7 +6,8 @@ Le socle est local : interface Vite sur 5173, façade sur 127.0.0.1:8010 et mote
 interne sur 127.0.0.1:8011. Utiliser Node 22 LTS à partir de 22.12, ou une version
 ultérieure compatible. `.nvmrc` sélectionne la branche 22 ; package.json annonce
 le minimum exact. Prévoir Python 3 avec venv et le paquet ffmpeg complet, dont
-ffprobe. Le script actuel de transcription est prévu pour Bash et un venv Unix.
+ffprobe. L’installateur Node choisit le venv natif Windows ou Unix. Pour Windows,
+suivre [la préparation dédiée](INSTALLATION_WINDOWS.md) avec `npm.cmd`.
 
 ```bash
 npm ci

@@ -49,6 +49,8 @@ Le moteur 8011 exige un secret interne local ; l’interface et les diagnostics 
 
 ## Démarrage
 
+Pour Windows natif, suivre [la préparation Windows](docs/INSTALLATION_WINDOWS.md).
+
 Prérequis : Node **22.12 ou plus récent** (branche 22 LTS recommandée), Python 3
 avec venv, `ffmpeg` et `ffprobe`. Voir [installation et réception locale](docs/INSTALLATION_RECEPTION.md).
 

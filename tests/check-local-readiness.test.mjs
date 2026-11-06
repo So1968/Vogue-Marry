@@ -1,3 +1,4 @@
+import { localPythonPath } from "../backend/lib/runtime-paths.js";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
@@ -26,7 +27,7 @@ test("diagnostic local : retrouver le venv du dépôt depuis un autre répertoir
   });
   assert.equal(run.status, 0, run.stderr);
   const report = JSON.parse(run.stdout);
-  assert.equal(report.localPythonEnvironment, fs.existsSync(path.resolve(".venv-transcription/bin/python")));
+  assert.equal(report.localPythonEnvironment, fs.existsSync(localPythonPath(process.cwd())));
   assert.equal(typeof report.api.healthy, "boolean");
   assert.equal(typeof report.transcription.healthy, "boolean");
 });

@@ -6,10 +6,12 @@
 
 ## État du dépôt
 
-- `main` est le tronc stable et la seule branche de développement à utiliser désormais.
-- Les anciennes branches de travail ont été rassemblées sur le même état que `main`.
+- `main` est le tronc stable ; les évolutions sont préparées sur une branche de consolidation active, puis intégrées par PR vérifiée.
+- Les anciennes branches de travail ne sont pas toutes alignées sur `main`. Les branches de PR déjà fusionnées sont candidates au nettoyage après vérification de leur tête ; les PR ouvertes sont conservées.
 - `archive/rustines-esthetiques-20260731` reste volontairement séparée : c’est une archive, pas une branche à fusionner.
 - Les données personnelles et projets réels restent hors de Git, dans `~/VOGUE-MERRY-DONNEES`.
+
+Voir [l’inventaire des branches du 6 novembre 2026](docs/GIT_BRANCHES_2026-11-06.md) : 79 candidates au nettoyage, 7 branches avec PR ouverte, `main` et l’archive volontaire. Aucune suppression distante n’a été effectuée.
 
 ## Parcours produit
 

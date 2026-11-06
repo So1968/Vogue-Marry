@@ -1,22 +1,23 @@
 # Rangement Git — audit du 6 novembre 2026
 
-L'inventaire a été vérifié sur les références GitHub et les PR, sans suppression distante.
-Il révèle **88 branches distantes** :
+## Résultat du nettoyage autorisé
 
-- **77** correspondent exactement à la tête d'une PR fusionnée dans main ;
-- **2** autres pointent sur un ancêtre de main ;
-- **7** portent une PR ouverte et doivent être conservées ;
-- **2** sont protégées : main et archive/rustines-esthetiques-20260731.
+Après rétablissement de l'accès d'écriture GitHub, les **79 branches intégrées**
+ont été supprimées en une transaction atomique. Chaque tête était conditionnée à
+son SHA attendu. Le contrôle suivant a confirmé **10 branches distantes** : main,
+l'archive volontaire, les 7 branches de PR antérieures listées ci-dessous et
+`codex/consolidation-v1`, publiée dans la [PR #94](https://github.com/So1968/Vogue-Marry/pull/94).
+La tête de main n'a pas été modifiée par ce nettoyage.
 
-Les **79 candidates au nettoyage** sont donc identifiées par une preuve
-d'intégration, pas seulement par leur nom ou leur ancienneté. Aucune n'a été
-supprimée : malgré l'autorisation donnée par le propriétaire, la suppression
-atomique a été refusée par GitHub avec HTTP 403. Les têtes distantes ont été
-revérifiées et sont restées identiques. Le connecteur refuse aussi la création
-de branche avec Resource not accessible by integration. Recontrôler les têtes et les
-PR juste avant tout nettoyage ; ne jamais supprimer une branche qui a avancé
-ou porte une nouvelle PR. Une suppression doit utiliser la tête attendue comme
-condition pour refuser une modification concurrente.
+L'inventaire préalable recensait **88 branches** : 77 têtes correspondant exactement
+à une PR fusionnée dont le commit de fusion est dans main, 2 ancêtres de main,
+7 branches de PR ouvertes et 2 références protégées. La publication de la
+consolidation a ajouté une branche avant suppression des 79 anciennes références.
+
+Les premières tentatives avaient échoué avec HTTP 403 sans modifier les références.
+Le propriétaire a ensuite rétabli l'accès de la connexion GitHub. Une sauvegarde
+complète et vérifiée de l'historique précédait l'opération. Pour les prochains
+nettoyages, refaire ces vérifications et conserver les PR ouvertes et l'archive.
 
 ## Branches portant une PR ouverte
 

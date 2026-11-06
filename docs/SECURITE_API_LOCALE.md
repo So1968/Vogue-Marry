@@ -48,3 +48,37 @@ la substitution d'en-tête, les permissions, les liens symboliques du secret,
 les origines étrangères, les autres ports locaux et la compatibilité du proxy.
 La recette microphone et les moteurs de transcription sur le poste utilisateur
 restent distincts de ces tests de contrôle d'accès.
+
+## Confinement physique des fichiers
+
+Les contrôles de chemins examinent maintenant le chemin logique et sa destination
+physique, y compris les liens symboliques et les jonctions NTFS. Pour un fichier
+qui n'existe pas encore, le plus proche parent existant est résolu avant de valider
+la destination future. Un lien cassé n'est pas traité comme une destination libre.
+
+Les chemins complets sont vérifiés avant les accès aux projets, journaux, Log Pose,
+documents et résultats de transcription. Les partitions projets, entrée documentaire
+et tâches de transcription ne peuvent pas se rediriger entre elles. La protection
+s'applique également aux dossiers temporaires d'upload et aux versions créées.
+Les liens internes restant dans leur racine demeurent utilisables et une racine
+mémoire volontairement liée à un volume connu est conservée comme ancrage.
+
+Une requête rencontrant un lien sortant est refusée ; le lien et sa cible ne sont
+ni supprimés, ni déplacés, ni modifiés. Les erreurs de confinement ne renvoient pas
+le chemin absolu de la cible. La recette couvre lecture, sauvegarde, validation,
+fragments audio, résultats de transcription et refus d'upload sans arrêt du moteur.
+Les jonctions sont également vérifiées dans le job Windows natif.
+
+Ces vérifications précèdent les accès fichiers : elles ne constituent pas une
+sandbox contre un programme exécuté sous le compte de confiance qui remplacerait
+les chemins pendant les opérations. Aucun chiffrement de volume ou changement
+d'ACL sur les données réelles du poste n'est effectué par cette correction.
+
+## Création concurrente du token
+
+Le fichier temporaire est complet avant publication par lien physique exclusif.
+Une autre instance qui rencontre le fichier publié le charge au lieu de remplacer
+son contenu. Un test lance huit processus sur le même dossier temporaire et compare
+les empreintes des tokens obtenus, sans exposer leurs valeurs ; ils doivent tous
+charger le même token complet et ne laisser aucun temporaire. Ce contrôle confirme
+le démarrage concurrent testé, pas une protection contre un compte OS compromis.

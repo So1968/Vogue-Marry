@@ -7,7 +7,7 @@ import http from "http";
 import path from "path";
 import os from "os";
 import multer from "multer";
-import { safeSegment, safePathInside } from "./lib/path-guards.js";
+import { safeSegment, safePathInside, createDataPath } from "./lib/path-guards.js";
 import { createProjectReader } from "./lib/project-reader.js";
 import { makeProjectCreator } from "./lib/project-creator.js";
 import { normalizeLogPoseManual } from "./lib/log-pose-normalization.js";
@@ -37,8 +37,9 @@ const HOP_BY_HOP_HEADERS = new Set([
 
 const HOME = os.homedir();
 const DATA_ROOT = path.join(HOME, "VOGUE-MERRY-DONNEES");
-const PROJECTS_ROOT = path.join(DATA_ROOT, "01_PROJETS");
-const WATER_SEVEN_ROOT = path.join(DATA_ROOT, "00_WATER_SEVEN_PORT_ENTREE");
+const memoryPath = createDataPath(DATA_ROOT, ["01_PROJETS", "00_WATER_SEVEN_PORT_ENTREE"]);
+const PROJECTS_ROOT = memoryPath(DATA_ROOT, "01_PROJETS");
+const WATER_SEVEN_ROOT = memoryPath(DATA_ROOT, "00_WATER_SEVEN_PORT_ENTREE");
 const ALLOWED_ORIGINS = LOCAL_ORIGINS;
 const internalToken = loadInternalToken(path.join(HOME, ".config", "vogue-merry"));
 const DOCUMENT_EXTENSIONS = new Set([
@@ -164,15 +165,15 @@ function createFileVersion(filePath, reason = "version") {
   if (!fs.existsSync(filePath)) return null;
 
   const dir = path.dirname(filePath);
-  const versionsDir = path.join(dir, "99_versions");
+  const versionsDir = memoryPath(dir, "99_versions");
   ensureDir(versionsDir);
 
   const parsed = path.parse(filePath);
   const baseVersionName = `${timestampForFile()}_${parsed.name}_${reason}`;
-  let versionPath = path.join(versionsDir, `${baseVersionName}${parsed.ext}`);
+  let versionPath = memoryPath(versionsDir, `${baseVersionName}${parsed.ext}`);
   let duplicateIndex = 2;
   while (fs.existsSync(versionPath)) {
-    versionPath = path.join(versionsDir, `${baseVersionName}_${duplicateIndex}${parsed.ext}`);
+    versionPath = memoryPath(versionsDir, `${baseVersionName}_${duplicateIndex}${parsed.ext}`);
     duplicateIndex += 1;
   }
   fs.copyFileSync(filePath, versionPath);
@@ -285,7 +286,7 @@ function readJsonIfExists(filePath) {
 }
 
 function readMeetingData(meetingDir) {
-  return readJsonIfExists(path.join(meetingDir, "donnees_escale.json"));
+  return readJsonIfExists(memoryPath(meetingDir, "donnees_escale.json"));
 }
 
 function findMeetingDir(projectSlug, meetingDirName) {
@@ -297,8 +298,8 @@ function findMeetingDir(projectSlug, meetingDirName) {
 
 function findReportPaths(meetingDir) {
   return {
-    validatedPath: path.join(meetingDir, "journal_de_bord_valide.md"),
-    exportedPath: path.join(meetingDir, "journal_de_bord_exporte.md")
+    validatedPath: memoryPath(meetingDir, "journal_de_bord_valide.md"),
+    exportedPath: memoryPath(meetingDir, "journal_de_bord_exporte.md")
   };
 }
 
@@ -325,7 +326,7 @@ function audioDescriptor(file) {
 }
 
 function readAudioChunkManifest(chunksDir) {
-  const manifest = readJsonIfExists(path.join(chunksDir, "manifest.json"));
+  const manifest = readJsonIfExists(memoryPath(chunksDir, "manifest.json"));
   if (!manifest || !AUDIO_EXTENSIONS.has(manifest.extension)) return null;
   return {
     mimeType: String(manifest.mimeType || "application/octet-stream"),
@@ -334,7 +335,7 @@ function readAudioChunkManifest(chunksDir) {
 }
 
 function ensureAudioChunkManifest(chunksDir, descriptor) {
-  const manifestPath = path.join(chunksDir, "manifest.json");
+  const manifestPath = memoryPath(chunksDir, "manifest.json");
   try {
     fs.writeFileSync(manifestPath, JSON.stringify(descriptor, null, 2), { flag: "wx" });
     return descriptor;
@@ -528,14 +529,14 @@ function normalizeStoredKnowledgeEntry(projectSlug, kind, entry, index) {
 
 function readValidatedKnowledgeProposals(projectSlug, kind) {
   const projectDir = safePathInside(PROJECTS_ROOT, projectSlug);
-  const meetingsDir = path.join(projectDir, "01_escales_reunions");
+  const meetingsDir = memoryPath(projectDir, "01_escales_reunions");
   if (!fs.existsSync(meetingsDir)) return [];
 
   const proposals = [];
   const meetings = fs.readdirSync(meetingsDir, { withFileTypes: true });
   for (const meeting of meetings) {
     if (!meeting.isDirectory() || meeting.isSymbolicLink()) continue;
-    const meetingDir = path.join(meetingsDir, meeting.name);
+    const meetingDir = memoryPath(meetingsDir, meeting.name);
     const validatedPath = findReportPaths(meetingDir).validatedPath;
     if (!fs.existsSync(validatedPath)) continue;
     const content = fs.readFileSync(validatedPath, "utf8");
@@ -552,7 +553,7 @@ function writeKnowledgeEntries(projectSlug, kind, entries) {
   const config = KNOWLEDGE_CONFIG[kind];
   const directory = safePathInside(PROJECTS_ROOT, projectSlug, config.folder);
   ensureDir(directory);
-  fs.writeFileSync(path.join(directory, config.fileName), JSON.stringify(entries, null, 2), "utf8");
+  fs.writeFileSync(memoryPath(directory, config.fileName), JSON.stringify(entries, null, 2), "utf8");
 
   const projectName = entries[0]?.projectName || projectSlug.replaceAll("_", " ");
   const lines = kind === "action"
@@ -578,7 +579,7 @@ function writeKnowledgeEntries(projectSlug, kind, entries) {
         "|---|---|---|---|---|---|",
         ...entries.map((entry) => `| ${knowledgeMarkdownValue(entry.need)} | ${knowledgeMarkdownValue(entry.context)} | ${knowledgeMarkdownValue(entry.priority)} | ${knowledgeMarkdownValue(entry.statut)} | ${knowledgeMarkdownValue(entry.source)} | ${knowledgeMarkdownValue(entry.projectName)} |`)
       ];
-  fs.writeFileSync(path.join(directory, config.markdownName), `${lines.join("\n")}\n`, "utf8");
+  fs.writeFileSync(memoryPath(directory, config.markdownName), `${lines.join("\n")}\n`, "utf8");
 }
 
 function knowledgeItemsForProject(projectSlug, kind) {
@@ -611,7 +612,7 @@ function listProjectMeetings(projectSlug) {
   return fs.readdirSync(meetingsRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory() && !entry.isSymbolicLink())
     .map((entry) => {
-      const meetingDir = path.join(meetingsRoot, entry.name);
+      const meetingDir = memoryPath(meetingsRoot, entry.name);
       const data = readMeetingData(meetingDir) || {};
       const reportPaths = findReportPaths(meetingDir);
       return {
@@ -656,7 +657,7 @@ function walkDocumentFiles(dirPath, files = []) {
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
   for (const entry of entries) {
     if (entry.isSymbolicLink()) continue;
-    const fullPath = path.join(dirPath, entry.name);
+    const fullPath = memoryPath(dirPath, entry.name);
     if (entry.isDirectory()) {
       if (entry.name !== "99_versions") walkDocumentFiles(fullPath, files);
       continue;
@@ -697,7 +698,7 @@ function makeDocumentRecord(filePath, options = {}) {
 function listProjectDocuments(projectSlug) {
   const projectDir = safePathInside(PROJECTS_ROOT, projectSlug);
   const documents = [];
-  const coffreDir = path.join(projectDir, "08_coffre_documents_sources");
+  const coffreDir = memoryPath(projectDir, "08_coffre_documents_sources");
 
   for (const filePath of walkDocumentFiles(coffreDir)) {
     documents.push(makeDocumentRecord(filePath, {
@@ -707,12 +708,12 @@ function listProjectDocuments(projectSlug) {
     }));
   }
 
-  const meetingsDir = path.join(projectDir, "01_escales_reunions");
+  const meetingsDir = memoryPath(projectDir, "01_escales_reunions");
   if (fs.existsSync(meetingsDir)) {
     const meetingEntries = fs.readdirSync(meetingsDir, { withFileTypes: true });
     for (const meetingEntry of meetingEntries) {
       if (!meetingEntry.isDirectory() || meetingEntry.isSymbolicLink()) continue;
-      const attachmentsDir = path.join(meetingsDir, meetingEntry.name, "pieces_jointes");
+      const attachmentsDir = memoryPath(meetingsDir, meetingEntry.name, "pieces_jointes");
       for (const filePath of walkDocumentFiles(attachmentsDir)) {
         documents.push(makeDocumentRecord(filePath, {
           projectSlug,
@@ -735,11 +736,11 @@ function listWaterSevenDocuments() {
   for (const deposit of deposits) {
     if (!deposit.isDirectory() || deposit.isSymbolicLink()) continue;
     const depositDir = safePathInside(WATER_SEVEN_ROOT, deposit.name);
-    const metadataPath = path.join(depositDir, "fil_origine.json");
+    const metadataPath = memoryPath(depositDir, "fil_origine.json");
     const metadata = readJsonIfExists(metadataPath);
     const sourceFiles = fs.readdirSync(depositDir, { withFileTypes: true })
       .filter((entry) => entry.isFile() && entry.name !== "fil_origine.json" && entry.name !== "classement_valide.json")
-      .map((entry) => path.join(depositDir, entry.name));
+      .map((entry) => memoryPath(depositDir, entry.name));
 
     for (const filePath of sourceFiles) {
       documents.push(makeDocumentRecord(filePath, {
@@ -757,10 +758,10 @@ function listWaterSevenDocuments() {
 
 function uniqueDocumentPath(targetDir, fileName) {
   const parsed = path.parse(fileName);
-  let candidate = path.join(targetDir, fileName);
+  let candidate = memoryPath(targetDir, fileName);
   let suffix = 2;
   while (fs.existsSync(candidate)) {
-    candidate = path.join(targetDir, `${parsed.name}_${suffix}${parsed.ext}`);
+    candidate = memoryPath(targetDir, `${parsed.name}_${suffix}${parsed.ext}`);
     suffix += 1;
   }
   return candidate;
@@ -771,7 +772,7 @@ function findWaterSevenDocument(sourceId) {
   if (!safeSourceId) throw new Error("Document entrant invalide.");
 
   const depositDir = safePathInside(WATER_SEVEN_ROOT, safeSourceId);
-  const metadataPath = path.join(depositDir, "fil_origine.json");
+  const metadataPath = memoryPath(depositDir, "fil_origine.json");
   const metadata = readJsonIfExists(metadataPath);
   if (!metadata || !fs.existsSync(depositDir)) throw new Error("Document entrant introuvable.");
 
@@ -782,7 +783,7 @@ function findWaterSevenDocument(sourceId) {
   return {
     depositDir,
     metadata,
-    filePath: path.join(depositDir, sourceFile.name)
+    filePath: memoryPath(depositDir, sourceFile.name)
   };
 }
 
@@ -800,14 +801,14 @@ app.post("/api/water-seven/deposit", upload.single("document"), (req, res) => {
     if (!req.file) throw new Error("Aucun document reçu dans Water Seven.");
 
     ensureDir(WATER_SEVEN_ROOT);
-    const depositDir = fs.mkdtempSync(path.join(WATER_SEVEN_ROOT, `${timestampForFile()}_`));
+    const depositDir = fs.mkdtempSync(memoryPath(WATER_SEVEN_ROOT, `${timestampForFile()}_`));
     const depositId = path.basename(depositDir);
 
     const safeOriginalName = safeSegment(req.file.originalname || "document") || "document";
     const storedName = ["fil_origine.json", "classement_valide.json"].includes(safeOriginalName)
       ? `document_${safeOriginalName}`
       : safeOriginalName;
-    const filePath = path.join(depositDir, storedName);
+    const filePath = memoryPath(depositDir, storedName);
     fs.writeFileSync(filePath, req.file.buffer);
 
     const analysis = analyseWaterSevenDocument(req.file);
@@ -820,7 +821,7 @@ app.post("/api/water-seven/deposit", upload.single("document"), (req, res) => {
       analysis
     };
 
-    fs.writeFileSync(path.join(depositDir, "fil_origine.json"), JSON.stringify(metadata, null, 2), "utf8");
+    fs.writeFileSync(memoryPath(depositDir, "fil_origine.json"), JSON.stringify(metadata, null, 2), "utf8");
 
     res.status(201).json({ status: "ok", deposit: metadata });
   } catch (error) {
@@ -886,7 +887,7 @@ app.post("/api/documents/validate", (req, res) => {
       relativePath: toDataRelativePath(targetPath),
       analysis: incoming.metadata.analysis || null
     };
-    fs.writeFileSync(path.join(incoming.depositDir, "classement_valide.json"), JSON.stringify(validation, null, 2), "utf8");
+    fs.writeFileSync(memoryPath(incoming.depositDir, "classement_valide.json"), JSON.stringify(validation, null, 2), "utf8");
 
     res.status(201).json({
       status: "ok",
@@ -949,7 +950,7 @@ app.post("/api/meetings/export", (req, res) => {
     if (!fs.existsSync(projectDir)) throw new Error("Île/projet introuvable. Créez d’abord le projet.");
     const project = readProjectRecord(projectSlug);
 
-    const meetingsDir = path.join(projectDir, "01_escales_reunions");
+    const meetingsDir = memoryPath(projectDir, "01_escales_reunions");
     ensureDir(meetingsDir);
 
     const date = meetingDate || new Date().toISOString().slice(0, 10);
@@ -957,16 +958,16 @@ app.post("/api/meetings/export", (req, res) => {
     const titleSlug = slugify(title || "sans_titre").slice(0, 80) || "sans_titre";
     const baseMeetingDirName = `${date}_${typeSlug}_${titleSlug}`;
     let meetingDirName = baseMeetingDirName;
-    let meetingDir = path.join(meetingsDir, meetingDirName);
+    let meetingDir = memoryPath(meetingsDir, meetingDirName);
     let duplicateIndex = 2;
     while (fs.existsSync(meetingDir)) {
       meetingDirName = `${baseMeetingDirName}_${duplicateIndex}`;
-      meetingDir = path.join(meetingsDir, meetingDirName);
+      meetingDir = memoryPath(meetingsDir, meetingDirName);
       duplicateIndex += 1;
     }
 
     ensureDir(meetingDir);
-    ensureDir(path.join(meetingDir, "pieces_jointes"));
+    ensureDir(memoryPath(meetingDir, "pieces_jointes"));
 
     const markdown = `# Journal de bord — ${title || "Escale sans titre"}
 
@@ -1023,7 +1024,7 @@ ${keywords || ""}
 ${rawNotes || ""}
 `;
 
-    fs.writeFileSync(path.join(meetingDir, "journal_de_bord_exporte.md"), markdown, "utf8");
+    fs.writeFileSync(memoryPath(meetingDir, "journal_de_bord_exporte.md"), markdown, "utf8");
     const meetingData = {
       ...req.body,
       projectName: project.name,
@@ -1031,7 +1032,7 @@ ${rawNotes || ""}
       meetingDirName,
       createdAt: new Date().toISOString()
     };
-    fs.writeFileSync(path.join(meetingDir, "donnees_escale.json"), JSON.stringify(meetingData, null, 2), "utf8");
+    fs.writeFileSync(memoryPath(meetingDir, "donnees_escale.json"), JSON.stringify(meetingData, null, 2), "utf8");
 
     res.status(201).json({ status: "ok", projectSlug, meetingDirName });
   } catch (error) {
@@ -1052,7 +1053,7 @@ app.post("/api/meetings/export-audio", upload.single("audio"), (req, res) => {
     if (!fs.existsSync(meetingDir)) throw new Error("Escale introuvable. Exportez d’abord l’escale.");
 
     const extension = path.extname(req.file.originalname || "") || ".webm";
-    const audioPath = path.join(meetingDir, `audio_original${extension}`);
+    const audioPath = memoryPath(meetingDir, `audio_original${extension}`);
     if (fs.existsSync(audioPath)) {
       const existingAudio = fs.readFileSync(audioPath);
       if (!existingAudio.equals(req.file.buffer)) {
@@ -1086,14 +1087,14 @@ app.post("/api/meetings/save-markers", (req, res) => {
       }
     }
     const meetingDir = findMeetingDir(projectSlug, meetingDirName);
-    const dataPath = path.join(meetingDir, "donnees_escale.json");
+    const dataPath = memoryPath(meetingDir, "donnees_escale.json");
     if (!fs.existsSync(dataPath)) throw new Error("Escale introuvable.");
     const current = JSON.parse(fs.readFileSync(dataPath, "utf8"));
     const existing = Array.isArray(current.markers) ? current.markers : [];
     const byId = new Map(existing.map((item) => [item.id, item]));
     for (const marker of markers) byId.set(marker.id, marker);
     const merged = [...byId.values()].sort((a, b) => a.timeSeconds - b.timeSeconds);
-    const temp = path.join(meetingDir, `markers_${process.pid}_${Date.now()}.tmp`);
+    const temp = memoryPath(meetingDir, `markers_${process.pid}_${Date.now()}.tmp`);
     try {
       fs.writeFileSync(temp, JSON.stringify({ ...current, markers: merged }, null, 2), { flag: "wx" });
       fs.renameSync(temp, dataPath);
@@ -1114,11 +1115,11 @@ app.post("/api/meetings/audio-chunk", upload.single("audio"), (req, res) => {
     if (!req.file?.buffer?.length) throw new Error("Bloc audio vide.");
     const index = Number(req.body.index);
     if (!Number.isSafeInteger(index) || index < 0 || index > 100000) throw new Error("Indice de bloc invalide.");
-    const chunksDir = path.join(meetingDir, "audio_chunks");
+    const chunksDir = memoryPath(meetingDir, "audio_chunks");
     ensureDir(chunksDir);
     const descriptor = ensureAudioChunkManifest(chunksDir, audioDescriptor(req.file));
     const fileName = `chunk_${String(index).padStart(6, "0")}.part`;
-    const filePath = path.join(chunksDir, fileName);
+    const filePath = memoryPath(chunksDir, fileName);
     if (fs.existsSync(filePath)) {
       if (!fs.readFileSync(filePath).equals(req.file.buffer)) {
         return res.status(409).json({ error: "Ce bloc existe déjà avec un contenu différent." });
@@ -1137,14 +1138,14 @@ app.post("/api/meetings/audio-chunks-status", (req, res) => {
     const projectSlug = slugify(req.body.projectName);
     const meetingDir = findMeetingDir(projectSlug, req.body.meetingDirName);
     if (!fs.existsSync(meetingDir)) throw new Error("Escale introuvable.");
-    const chunksDir = path.join(meetingDir, "audio_chunks");
+    const chunksDir = memoryPath(meetingDir, "audio_chunks");
     const received = fs.existsSync(chunksDir)
       ? fs.readdirSync(chunksDir).filter((name) => /^chunk_\d{6}\.part$/u.test(name))
         .map((name) => Number(name.slice(6, 12))).sort((a, b) => a - b)
       : [];
     const manifest = fs.existsSync(chunksDir) ? readAudioChunkManifest(chunksDir) : null;
     const chunks = received.map((index) => ({
-      index, ...audioFileDigest(path.join(chunksDir, `chunk_${String(index).padStart(6, "0")}.part`))
+      index, ...audioFileDigest(memoryPath(chunksDir, `chunk_${String(index).padStart(6, "0")}.part`))
     }));
     return res.json({ status: "ok", received, chunks, ...(manifest || {}) });
   } catch (error) {
@@ -1159,9 +1160,9 @@ app.post("/api/meetings/audio-chunks-finalize", (req, res) => {
     if (!fs.existsSync(meetingDir)) throw new Error("Escale introuvable.");
     const count = Number(req.body.count);
     if (!Number.isSafeInteger(count) || count < 1 || count > 100000) throw new Error("Nombre de blocs invalide.");
-    const chunksDir = path.join(meetingDir, "audio_chunks");
+    const chunksDir = memoryPath(meetingDir, "audio_chunks");
     const paths = Array.from({ length: count }, (_, i) =>
-      path.join(chunksDir, `chunk_${String(i).padStart(6, "0")}.part`));
+      memoryPath(chunksDir, `chunk_${String(i).padStart(6, "0")}.part`));
     if (paths.some((filePath) => !fs.existsSync(filePath))) {
       return res.status(409).json({ error: "Il manque des blocs audio. Finalisation refusée." });
     }
@@ -1179,7 +1180,7 @@ app.post("/api/meetings/audio-chunks-finalize", (req, res) => {
     // l'enregistrement explicite du type : elles étaient exclusivement WebM.
     const manifest = readAudioChunkManifest(chunksDir) || { mimeType: "audio/webm", extension: ".webm" };
     const audioFileName = `audio_original${manifest.extension}`;
-    const audioPath = path.join(meetingDir, audioFileName);
+    const audioPath = memoryPath(meetingDir, audioFileName);
     const originals = audioOriginalFiles(meetingDir);
     if (originals.length > 1) {
       return res.status(409).json({ error: "Plusieurs audios originaux existent déjà. Vérification manuelle nécessaire." });
@@ -1198,7 +1199,7 @@ app.post("/api/meetings/audio-chunks-finalize", (req, res) => {
       return res.status(409).json({ error: "Un audio original différent existe déjà. Il ne sera pas remplacé." });
     }
 
-    const temporaryPath = path.join(meetingDir, `audio_assembly_${process.pid}_${Date.now()}.tmp`);
+    const temporaryPath = memoryPath(meetingDir, `audio_assembly_${process.pid}_${Date.now()}.tmp`);
     try {
       const fd = fs.openSync(temporaryPath, "wx");
       try {
@@ -1226,14 +1227,14 @@ app.get("/api/meetings/audio", (req, res) => {
     const meetingDirName = safeSegment(req.query.meetingDirName);
     if (!projectSlug || !meetingDirName) return res.status(400).json({ error: "Escale invalide." });
     const meetingDir = findMeetingDir(projectSlug, meetingDirName);
-    if (!fs.existsSync(path.join(meetingDir, "donnees_escale.json"))) {
+    if (!fs.existsSync(memoryPath(meetingDir, "donnees_escale.json"))) {
       return res.status(404).json({ error: "Escale introuvable." });
     }
     const originals = audioOriginalFiles(meetingDir);
     if (originals.length !== 1) {
       return res.status(404).json({ error: "Aucun audio original unique à écouter." });
     }
-    const originalPath = path.join(meetingDir, originals[0]);
+    const originalPath = memoryPath(meetingDir, originals[0]);
     if (!fs.lstatSync(originalPath).isFile()) {
       return res.status(409).json({ error: "Audio original non régulier." });
     }
@@ -1253,20 +1254,20 @@ app.get("/api/inbox", (req, res) => {
     const projects = fs.readdirSync(PROJECTS_ROOT, { withFileTypes: true }).filter((entry) => entry.isDirectory());
 
     for (const project of projects) {
-      const meetingsDir = path.join(PROJECTS_ROOT, project.name, "01_escales_reunions");
+      const meetingsDir = memoryPath(PROJECTS_ROOT, project.name, "01_escales_reunions");
       if (!fs.existsSync(meetingsDir)) continue;
       const projectRecord = readProjectRecord(project.name);
 
       const meetings = fs.readdirSync(meetingsDir, { withFileTypes: true }).filter((entry) => entry.isDirectory());
 
       for (const meeting of meetings) {
-        const meetingDir = path.join(meetingsDir, meeting.name);
+        const meetingDir = memoryPath(meetingsDir, meeting.name);
         const data = readMeetingData(meetingDir);
         const reportPaths = findReportPaths(meetingDir);
         const hasAudio = meetingHasAudio(meetingDir);
         const hasReport = fs.existsSync(reportPaths.exportedPath);
         const hasValidatedReport = fs.existsSync(reportPaths.validatedPath);
-        const hasTranscription = fs.existsSync(path.join(meetingDir, "transcription_v6.json"));
+        const hasTranscription = fs.existsSync(memoryPath(meetingDir, "transcription_v6.json"));
         const hasRawNotes = Boolean(data?.rawNotes && String(data.rawNotes).trim());
 
         let status = "À traiter";
@@ -1399,8 +1400,8 @@ app.post("/api/meetings/save-report", (req, res) => {
     const meetingDir = findMeetingDir(safeProjectSlug, safeMeetingDirName);
     if (!fs.existsSync(meetingDir)) throw new Error("Escale introuvable.");
 
-    const exportedPath = path.join(meetingDir, "journal_de_bord_exporte.md");
-    if (fs.existsSync(path.join(meetingDir, "journal_de_bord_valide.md"))) {
+    const exportedPath = memoryPath(meetingDir, "journal_de_bord_exporte.md");
+    if (fs.existsSync(memoryPath(meetingDir, "journal_de_bord_valide.md"))) {
       throw new Error("Ce journal est déjà validé et protégé contre les modifications.");
     }
 
@@ -1527,7 +1528,7 @@ function walkFiles(dirPath, files = [], { includeHistory = false } = {}) {
   const entries = fs.readdirSync(dirPath, { withFileTypes: true });
   for (const entry of entries) {
     if (entry.isSymbolicLink()) continue;
-    const fullPath = path.join(dirPath, entry.name);
+    const fullPath = memoryPath(dirPath, entry.name);
     if (entry.isDirectory()) {
       if (entry.name === "99_versions" && !includeHistory) continue;
       walkFiles(fullPath, files, { includeHistory });
@@ -1617,6 +1618,13 @@ app.get("/api/search/read", (req, res) => {
   } catch (error) {
     res.status(400).json({ error: error.message || "Erreur pendant la lecture de la source." });
   }
+});
+
+app.use((error, _req, res, next) => {
+  if (error.code === "VOGUE_PATH_OUTSIDE_ROOT") {
+    return res.status(400).json({ error: error.message });
+  }
+  return next(error);
 });
 
 app.listen(PORT, "127.0.0.1", () => {

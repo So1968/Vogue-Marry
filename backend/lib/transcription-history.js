@@ -1,3 +1,4 @@
+import { safePathInside } from "./path-guards.js";
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
@@ -26,7 +27,7 @@ export function preserveOriginalTranscript(dir) {
 
 // Snapshot avant toute correction : si une copie échoue, ne pas commencer les écrits.
 export function snapshotTranscript({ dir, meetingDir, reason }) {
-  const root = path.join(dir, "99_versions");
+  const root = safePathInside(dir, "99_versions");
   fs.mkdirSync(root, { recursive: true });
   const snapshot = fs.mkdtempSync(path.join(root, "transcription-"));
   try {

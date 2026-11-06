@@ -1,5 +1,4 @@
 import fs from "node:fs";
-import path from "node:path";
 
 export function makeLogPoseWriter({ projectsRoot, safePathInside, ensureDir, normalizeLogPoseManual, knowledgeMarkdownValue }) {
   function logPoseMarkdownList(items, emptyText) {
@@ -11,7 +10,7 @@ function writeLogPose(projectSlug, snapshot, manual) {
   ensureDir(directory);
   const normalizedManual = normalizeLogPoseManual(manual);
   const payload = { ...snapshot, manual: normalizedManual };
-  fs.writeFileSync(path.join(directory, "log_pose.json"), JSON.stringify(payload, null, 2), "utf8");
+  fs.writeFileSync(safePathInside(directory, "log_pose.json"), JSON.stringify(payload, null, 2), "utf8");
 
   const actionLines = snapshot.priorityActions.length
     ? snapshot.priorityActions.map((item) => {
@@ -62,7 +61,7 @@ function writeLogPose(projectSlug, snapshot, manual) {
     "",
     `- ${snapshot.pendingReview.total} élément${snapshot.pendingReview.total > 1 ? "s" : ""} en attente de validation (${snapshot.pendingReview.actions} manœuvre${snapshot.pendingReview.actions > 1 ? "s" : ""}, ${snapshot.pendingReview.decisions} cap${snapshot.pendingReview.decisions > 1 ? "s" : ""}, ${snapshot.pendingReview.needs || 0} besoin${(snapshot.pendingReview.needs || 0) > 1 ? "s" : ""}).`
   ];
-  fs.writeFileSync(path.join(directory, "log_pose.md"), `${lines.join("\n")}\n`, "utf8");
+  fs.writeFileSync(safePathInside(directory, "log_pose.md"), `${lines.join("\n")}\n`, "utf8");
   return payload;
 }
 

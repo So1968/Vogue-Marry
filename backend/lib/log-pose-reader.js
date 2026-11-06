@@ -1,14 +1,13 @@
 import fs from "node:fs";
-import path from "node:path";
 
 export function makeLogPoseReader({ projectsRoot, safePathInside, readJsonIfExists, normalizeLogPoseManual, extractMarkdownSection, defaults }) {
   return function readLogPoseManual(projectSlug) {
   const directory = safePathInside(projectsRoot, projectSlug, "10_log_pose");
-  const jsonPath = path.join(directory, "log_pose.json");
+  const jsonPath = safePathInside(directory, "log_pose.json");
   const stored = readJsonIfExists(jsonPath);
   if (stored) return normalizeLogPoseManual(stored.manual || stored);
 
-  const markdownPath = path.join(directory, "log_pose.md");
+  const markdownPath = safePathInside(directory, "log_pose.md");
   if (!fs.existsSync(markdownPath)) return { ...defaults };
   const content = fs.readFileSync(markdownPath, "utf8");
   const sectionText = (heading) => extractMarkdownSection(content, [heading])

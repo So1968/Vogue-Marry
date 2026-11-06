@@ -1,4 +1,3 @@
-import path from "node:path";
 
 export function makeProjectCreator({ projectsRoot, slugify, safePathInside, ensureDir, writeFileIfMissing, syncLogPose, readProjectRecord }) {
   return function createProjectStructure(projectName, projectDescription = "") {
@@ -8,7 +7,7 @@ export function makeProjectCreator({ projectsRoot, slugify, safePathInside, ensu
   const baseDir = safePathInside(projectsRoot, slug);
   ensureDir(baseDir);
   writeFileIfMissing(
-    path.join(baseDir, "projet.json"),
+    safePathInside(baseDir, "projet.json"),
     JSON.stringify({
       version: 1,
       slug,
@@ -32,10 +31,10 @@ export function makeProjectCreator({ projectsRoot, slugify, safePathInside, ensu
     "10_log_pose"
   ];
 
-  folders.forEach((folder) => ensureDir(path.join(baseDir, folder)));
+  folders.forEach((folder) => ensureDir(safePathInside(baseDir, folder)));
 
   writeFileIfMissing(
-    path.join(baseDir, "README_PROJET.md"),
+    safePathInside(baseDir, "README_PROJET.md"),
 `# Île / projet — ${projectName}
 
 Ce dossier contient la mémoire navigable du projet dans Vogue Merry.
@@ -56,7 +55,7 @@ Structure :
   );
 
   writeFileIfMissing(
-    path.join(baseDir, "00_carte_ile", "carte_ile.md"),
+    safePathInside(baseDir, "00_carte_ile", "carte_ile.md"),
 `# Carte de l’île — ${projectName}
 
 ## Objectif du projet
@@ -81,14 +80,14 @@ Structure :
 `
   );
 
-  writeFileIfMissing(path.join(baseDir, "02_caps_valides_decisions", "caps_valides.md"), `# Caps validés / décisions — ${projectName}\n\n| Date | Cap validé / décision | Statut | Source | Impact |\n|---|---|---|---|---|\n`);
-  writeFileIfMissing(path.join(baseDir, "03_manoeuvres_actions", "manoeuvres_actions.md"), `# Manœuvres / actions — ${projectName}\n\n| Action | Responsable | Échéance | Statut | Source |\n|---|---|---|---|---|\n`);
-  writeFileIfMissing(path.join(baseDir, "04_regles_methodes", "regles_methodes.md"), `# Règles / méthodes — ${projectName}\n\n| Règle / méthode | Statut | Source | Points ouverts |\n|---|---|---|---|\n`);
-  writeFileIfMissing(path.join(baseDir, "05_ecrans_parcours", "ecrans_parcours.md"), `# Écrans / parcours — ${projectName}\n\n| Écran / parcours | Objectif | Règles associées | Points ouverts |\n|---|---|---|---|\n`);
-  writeFileIfMissing(path.join(baseDir, "05_ecrans_parcours", "besoins.md"), `# Besoins identifiés — ${projectName}\n\n| Besoin | Contexte / preuve | Priorité | Statut | Source |\n|---|---|---|---|---|\n`);
-  writeFileIfMissing(path.join(baseDir, "06_donnees_imports_interfaces", "donnees_imports_interfaces.md"), `# Données / imports / interfaces — ${projectName}\n\n| Élément | Source | Usage | Points ouverts |\n|---|---|---|---|\n`);
-  writeFileIfMissing(path.join(baseDir, "07_questions_blocages", "questions_blocages.md"), `# Questions ouvertes / blocages — ${projectName}\n\n| Date | Sujet | Statut | Responsable | Source |\n|---|---|---|---|---|\n`);
-  writeFileIfMissing(path.join(baseDir, "10_log_pose", "log_pose.md"), `# Log Pose — ${projectName}\n\n## Ce qu’il faut retenir\n\n## Dernier cap validé\n\n## Manœuvres prioritaires\n\n## Questions ouvertes\n\n## Documents à retrouver\n\n## Prochaine direction utile\n`);
+  writeFileIfMissing(safePathInside(baseDir, "02_caps_valides_decisions", "caps_valides.md"), `# Caps validés / décisions — ${projectName}\n\n| Date | Cap validé / décision | Statut | Source | Impact |\n|---|---|---|---|---|\n`);
+  writeFileIfMissing(safePathInside(baseDir, "03_manoeuvres_actions", "manoeuvres_actions.md"), `# Manœuvres / actions — ${projectName}\n\n| Action | Responsable | Échéance | Statut | Source |\n|---|---|---|---|---|\n`);
+  writeFileIfMissing(safePathInside(baseDir, "04_regles_methodes", "regles_methodes.md"), `# Règles / méthodes — ${projectName}\n\n| Règle / méthode | Statut | Source | Points ouverts |\n|---|---|---|---|\n`);
+  writeFileIfMissing(safePathInside(baseDir, "05_ecrans_parcours", "ecrans_parcours.md"), `# Écrans / parcours — ${projectName}\n\n| Écran / parcours | Objectif | Règles associées | Points ouverts |\n|---|---|---|---|\n`);
+  writeFileIfMissing(safePathInside(baseDir, "05_ecrans_parcours", "besoins.md"), `# Besoins identifiés — ${projectName}\n\n| Besoin | Contexte / preuve | Priorité | Statut | Source |\n|---|---|---|---|---|\n`);
+  writeFileIfMissing(safePathInside(baseDir, "06_donnees_imports_interfaces", "donnees_imports_interfaces.md"), `# Données / imports / interfaces — ${projectName}\n\n| Élément | Source | Usage | Points ouverts |\n|---|---|---|---|\n`);
+  writeFileIfMissing(safePathInside(baseDir, "07_questions_blocages", "questions_blocages.md"), `# Questions ouvertes / blocages — ${projectName}\n\n| Date | Sujet | Statut | Responsable | Source |\n|---|---|---|---|---|\n`);
+  writeFileIfMissing(safePathInside(baseDir, "10_log_pose", "log_pose.md"), `# Log Pose — ${projectName}\n\n## Ce qu’il faut retenir\n\n## Dernier cap validé\n\n## Manœuvres prioritaires\n\n## Questions ouvertes\n\n## Documents à retrouver\n\n## Prochaine direction utile\n`);
   syncLogPose(slug);
 
   return readProjectRecord(slug);

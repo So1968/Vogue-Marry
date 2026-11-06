@@ -1,3 +1,5 @@
+import { mapSpeakersFromIntroductions } from "./lib/speaker-identification.js";
+import { atomicWriteText, preserveOriginalTranscript, snapshotTranscript } from "./lib/transcription-history.js";
 import { browserAccessGuard, LOCAL_ORIGINS, loadInternalToken, internalAccessGuard } from "./lib/local-access.js";
 import express from "express";
 import cors from "cors";
@@ -96,7 +98,7 @@ function statusPath(jobId) {
 
 function writeJson(filePath, value) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, JSON.stringify(value, null, 2), "utf8");
+  atomicWriteText(filePath, JSON.stringify(value, null, 2));
 }
 
 function readJson(filePath) {
@@ -485,43 +487,6 @@ function buildSpeakerTurns(local, diarization) {
   return turns;
 }
 
-function introductionScore(text, participant) {
-  const normalized = normalizeText(text);
-  const name = normalizeText(participant);
-  if (!normalized || !name) return 0;
-  const selfCue = /\b(je suis|je m appelle|moi c est|mon nom est|je me presente|je me nomme)\b/.test(normalized);
-  if (!selfCue) return 0;
-  return normalized.includes(name) ? 10 : 0;
-}
-
-function mapSpeakersFromIntroductions(turns, participants) {
-  const speakers = [];
-  for (const turn of turns) {
-    if (turn.sourceSpeaker !== "?" && !speakers.includes(turn.sourceSpeaker)) speakers.push(turn.sourceSpeaker);
-  }
-
-  const candidates = [];
-  for (const turn of turns) {
-    if (turn.start > 600 || turn.sourceSpeaker === "?") continue;
-    for (const participant of participants) {
-      const score = introductionScore(turn.text, participant) + (turn.start <= 180 ? 1 : 0);
-      if (score >= 10) candidates.push({ speaker: turn.sourceSpeaker, participant, score, start: turn.start });
-    }
-  }
-  candidates.sort((a, b) => b.score - a.score || a.start - b.start);
-
-  const map = {};
-  const usedParticipants = new Set();
-  for (const candidate of candidates) {
-    if (map[candidate.speaker] || usedParticipants.has(candidate.participant)) continue;
-    map[candidate.speaker] = { name: candidate.participant, confidence: "presentation-explicite" };
-    usedParticipants.add(candidate.participant);
-  }
-
-  const order = Object.fromEntries(speakers.map((speaker, index) => [speaker, index + 1]));
-  return { map, order, detectedSpeakerCount: speakers.length };
-}
-
 function finalizeTurns(turns, participants) {
   const mapping = mapSpeakersFromIntroductions(turns, participants);
   const segments = turns.map((turn, index) => {
@@ -749,8 +714,14 @@ async function processJob(jobId, sourcePath, originalName, mode, context, partic
       text: structured.segments.map((segment) => `${segment.speaker} — ${segment.text}`).join("\n")
     };
 
+    const resultDir = jobDir(jobId);
+    writeJson(path.join(resultDir, "transcription.json"), result);
+    preserveOriginalTranscript(resultDir);
+    const meetingDataPath = speakerMeetingDataPath(result.meeting?.id || "");
+    snapshotTranscript({ dir: resultDir, meetingDir: meetingDataPath ? path.dirname(meetingDataPath) : null,
+      reason: "integration-transcription" });
     persistTranscriptionToMeeting(result);
-    writeJson(path.join(jobDir(jobId), "transcription.json"), result);
+    writeJson(path.join(resultDir, "transcription.json"), result);
     fs.writeFileSync(
       path.join(jobDir(jobId), "transcription.md"),
       buildTranscriptMarkdown({
@@ -838,14 +809,15 @@ function speakerMeetingDataPath(meetingId) {
   return resolved.startsWith(root) ? resolved : null;
 }
 
-function cleanSpeakerMapping(mapping, participants) {
+function cleanSpeakerMapping(mapping, participants, segments) {
+  const sources = new Set((segments || []).map((segment) => segment.sourceSpeaker).filter(Boolean));
   if (!mapping || typeof mapping !== "object" || Array.isArray(mapping)) return {};
   const allowed = new Set((participants || []).map((name) => String(name || "").trim()).filter(Boolean));
   const clean = {};
   for (const [sourceSpeaker, rawName] of Object.entries(mapping)) {
     const speaker = String(sourceSpeaker || "").trim();
     const name = String(rawName || "").trim();
-    if (!speaker || !name) continue;
+    if (!sources.has(speaker) || !name || typeof rawName !== "string" || name.length > 200) continue;
     if (allowed.size && !allowed.has(name)) continue;
     clean[speaker] = name;
   }
@@ -956,7 +928,7 @@ function persistTranscriptionToMeeting(result) {
     const journalPath = path.join(meetingDir, "journal_de_bord_exporte.md");
 
     writeJson(transcriptionJsonPath, result);
-    fs.writeFileSync(transcriptionMarkdownPath, buildCorrectedTranscriptMarkdown(result), "utf8");
+    atomicWriteText(transcriptionMarkdownPath, buildCorrectedTranscriptMarkdown(result));
 
     const data = readJsonIfExists(dataPath) || {};
     data.transcription = {
@@ -972,7 +944,7 @@ function persistTranscriptionToMeeting(result) {
 
     if (fs.existsSync(journalPath)) {
       const currentJournal = fs.readFileSync(journalPath, "utf8");
-      fs.writeFileSync(journalPath, replaceManagedJournalSection(currentJournal, buildJournalTranscriptionSection(result)), "utf8");
+      atomicWriteText(journalPath, replaceManagedJournalSection(currentJournal, buildJournalTranscriptionSection(result)));
     }
 
     result.persistedToMeeting = true;
@@ -1018,11 +990,19 @@ app.post("/api/transcription/:jobId/speakers", (req, res) => {
 
     const result = readJson(resultPath);
     const status = readJsonIfExists(jobStatusPath) || {};
-    const mapping = cleanSpeakerMapping(req.body?.mapping, result.participants || []);
+    const mapping = cleanSpeakerMapping(req.body?.mapping, result.participants || [], result.segments);
     if (!Object.keys(mapping).length) return res.status(400).json({ error: "Aucune correspondance d'interlocuteur valide." });
 
-    const updatedAt = new Date().toISOString();
     const mergedOverrides = { ...(result.speakerOverrides || {}), ...mapping };
+    if (Object.entries(mapping).every(([source, name]) => result.speakerOverrides?.[source] === name)) {
+      return res.json({ status: "ok", persistedToMeeting: Boolean(result.persistedToMeeting),
+        mapping: mergedOverrides, unresolvedSpeakers: result.unresolvedSpeakers || [], result });
+    }
+    preserveOriginalTranscript(dir);
+    const meetingDataPath = speakerMeetingDataPath(result.meeting?.id || status.meetingId || "");
+    snapshotTranscript({ dir, meetingDir: meetingDataPath ? path.dirname(meetingDataPath) : null,
+      reason: "confirmation-interlocuteurs" });
+    const updatedAt = new Date().toISOString();
 
     result.segments = (result.segments || []).map((segment) => {
       const confirmed = mergedOverrides[segment.sourceSpeaker];
@@ -1041,10 +1021,11 @@ app.post("/api/transcription/:jobId/speakers", (req, res) => {
     result.text = result.segments.map((segment) => `${segment.speaker || "Intervenant"} — ${segment.text || ""}`).join("\n");
 
     writeJson(resultPath, result);
-    fs.writeFileSync(path.join(dir, "transcription.md"), buildCorrectedTranscriptMarkdown(result), "utf8");
+    atomicWriteText(path.join(dir, "transcription.md"), buildCorrectedTranscriptMarkdown(result));
 
     const persistedToMeeting = persistSpeakerMappingToMeeting(result, status, mergedOverrides, updatedAt);
     persistTranscriptionToMeeting(result);
+    writeJson(resultPath, result);
     writeJson(jobStatusPath, {
       ...status,
       jobId: result.jobId,

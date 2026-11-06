@@ -876,3 +876,57 @@ test("lectures navigateur : refuse les autres ports locaux et préserve les méd
     }, healthPath);
   }
 });
+
+test("transcription : corrections historisées, origine conservée et répétition idempotente", async () => {
+  await withUnifiedServer(async (home) => {
+    const root = path.join(home, "VOGUE-MERRY-DONNEES");
+    const dir = path.join(root, "99_TRANSCRIPTION_TESTS", "job-historique-fictif");
+    const meetingDir = path.join(root, "01_PROJETS", "ile_fictive", "01_escales_reunions", "escale_fictive");
+    fs.mkdirSync(dir, { recursive: true });
+    fs.mkdirSync(meetingDir, { recursive: true });
+    const original = JSON.stringify({ jobId: "job-historique-fictif", participants: ["Voix fictive A", "Voix fictive B"],
+      meeting: { id: "ile_fictive/escale_fictive" },
+      segments: [{ sourceSpeaker: "SPEAKER_00", speaker: "Intervenant 1", speakerConfidence: "non-identifie", text: "Texte synthétique." }],
+      unresolvedSpeakers: ["Intervenant 1"] });
+    fs.writeFileSync(path.join(dir, "transcription.json"), original);
+    fs.writeFileSync(path.join(dir, "transcription_locale_brute.json"), "ORIGINAL_TECHNIQUE_FICTIF");
+    fs.writeFileSync(path.join(dir, "audio_original.webm"), "AUDIO_FICTIF");
+    fs.writeFileSync(path.join(meetingDir, "donnees_escale.json"), "{}");
+    fs.writeFileSync(path.join(meetingDir, "journal_de_bord_exporte.md"), "Correction humaine fictive avant confirmation.\n");
+    fs.writeFileSync(path.join(meetingDir, "journal_de_bord_valide.md"), "JOURNAL_VALIDE_FICTIF");
+    const confirm = async (mapping) => {
+      const response = await fetch("http://127.0.0.1:8010/api/transcription/job-historique-fictif/speakers", {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mapping })
+      });
+      return { status: response.status, data: await response.json() };
+    };
+    assert.equal((await confirm({ VOIX_INEXISTANTE: "Voix fictive A" })).status, 400);
+    assert.equal(fs.existsSync(path.join(dir, "99_versions")), false);
+    const first = await confirm({ SPEAKER_00: "Voix fictive A" });
+    assert.equal(first.status, 200);
+    assert.deepEqual(first.data.unresolvedSpeakers, []);
+    assert.equal(fs.readFileSync(path.join(dir, "transcription_originale.json"), "utf8"), original);
+    const versions = () => fs.readdirSync(path.join(dir, "99_versions"));
+    assert.equal(versions().length, 1);
+    const firstVersion = path.join(dir, "99_versions", versions()[0]);
+    assert.equal(fs.readFileSync(path.join(firstVersion, "moteur", "transcription.json"), "utf8"), original);
+    assert.equal(fs.readFileSync(path.join(firstVersion, "escale", "journal_de_bord_exporte.md"), "utf8"), "Correction humaine fictive avant confirmation.\n");
+    const corrected = fs.readFileSync(path.join(dir, "transcription.json"), "utf8");
+    assert.equal((await confirm({ SPEAKER_00: "Voix fictive A" })).data.persistedToMeeting, true);
+    assert.equal(versions().length, 1);
+    assert.equal(fs.readFileSync(path.join(dir, "transcription.json"), "utf8"), corrected);
+    assert.equal((await confirm({ SPEAKER_00: "Voix fictive B" })).status, 200);
+    assert.equal(versions().length, 2);
+    assert.equal(fs.readFileSync(path.join(dir, "transcription_originale.json"), "utf8"), original);
+    assert.equal(fs.readFileSync(path.join(dir, "transcription_locale_brute.json"), "utf8"), "ORIGINAL_TECHNIQUE_FICTIF");
+    assert.equal(fs.readFileSync(path.join(dir, "audio_original.webm"), "utf8"), "AUDIO_FICTIF");
+    assert.equal(fs.readFileSync(path.join(meetingDir, "journal_de_bord_valide.md"), "utf8"), "JOURNAL_VALIDE_FICTIF");
+    // Si l'historique ne peut pas être copié, refuser avant toute correction.
+    fs.unlinkSync(path.join(meetingDir, "journal_de_bord_exporte.md"));
+    fs.symlinkSync(path.join(dir, "transcription_locale_brute.json"), path.join(meetingDir, "journal_de_bord_exporte.md"));
+    const beforeFailure = fs.readFileSync(path.join(dir, "transcription.json"), "utf8");
+    assert.equal((await confirm({ SPEAKER_00: "Voix fictive A" })).status, 500);
+    assert.equal(fs.readFileSync(path.join(dir, "transcription.json"), "utf8"), beforeFailure);
+    assert.equal(versions().length, 2);
+  });
+});

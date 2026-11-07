@@ -100,3 +100,29 @@ complète du réseau du poste : la page et la création initiale de l'escale res
 accessibles. Les résultats réellement exécutés sont consignés en CI. Deux minutes
 ne constituent pas une validation de plusieurs heures de réunion, d'une veille
 Windows ou d'un disque plein. Aucune donnée personnelle n'est utilisée.
+
+
+## Refus du stockage et arrêt du backend
+
+Deux scénarios supplémentaires de la vraie interface Firefox couvrent des pannes
+indépendantes. Leurs résultats effectifs sont consignés dans les journaux CI et
+la pull request correspondante.
+
+- Après un premier fragment confirmé, une injection provoque des
+  `QuotaExceededError` sur les ajouts au magasin audio IndexedDB. La capture doit
+  s'arrêter automatiquement et tenter de conserver le dernier événement. Les
+  fragments précédemment validés, leur compteur et les marqueurs restent
+  disponibles après rechargement. L'export de secours ne doit ni supprimer ces
+  fragments, ni faire apparaître un original finalisé.
+- Après un premier fragment entièrement reçu sur disque, seul le processus
+  backend du test est arrêté par SIGKILL. La capture continue localement pendant
+  la panne puis s'arrête normalement. Après redémarrage du backend avec le même
+  HOME fictif, la reprise doit préserver le premier fragment, transférer les
+  suivants et finaliser un original dont le SHA-256 correspond aux blocs locaux.
+  Les marqueurs sont également repris et le décodage ne doit signaler aucune erreur.
+
+L'injection de quota ne remplit pas le disque : elle teste le traitement d'un
+refus d'écriture, pas la durabilité matérielle ni le comportement d'un volume
+réel saturé. Les fragments refusés par IndexedDB ne sont pas annoncés comme
+sauvegardés. Ces recettes utilisent uniquement des profils, données et signaux
+audio fictifs ; elles ne valident pas la veille ou le microphone Windows réel.

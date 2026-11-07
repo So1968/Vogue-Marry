@@ -61,6 +61,6 @@ jobs:
       - name: Installer les dépendances verrouillées
         run: npm ci
       - name: Vérifier les chemins, ACL et services natifs Windows
-        run: node --test --test-concurrency=1 tests/platform-runtime.test.mjs tests/windows-runtime.test.mjs
+        run: node --test --test-concurrency=1 tests/platform-runtime.test.mjs tests/backend-path-guards.test.mjs tests/windows-runtime.test.mjs
       - name: Construire le frontend sous Windows
         run: npm run build

@@ -13,6 +13,17 @@ const home = fs.mkdtempSync(path.join(os.tmpdir(), "vogue-e2e-ui-"));
 const children = [];
 let browser;
 let crashContext;
+let backend;
+
+async function waitForChunks(page, count) {
+  const deadline = Date.now() + 20000;
+  do {
+    const snapshot = await snapshotAudio(page);
+    if (snapshot?.chunks.length >= count) return snapshot;
+    await delay(100);
+  } while (Date.now() < deadline);
+  throw new Error(`Fragments confirmés insuffisants : ${count} attendus.`);
+}
 
 async function snapshotAudio(page) {
   return page.evaluate(async () => {
@@ -63,7 +74,7 @@ async function waitFor(url) {
 }
 
 try {
-  launch(process.execPath, ["backend/server.js"], { HOME: home });
+  backend = launch(process.execPath, ["backend/server.js"], { HOME: home });
   launch(process.execPath, ["node_modules/vite/bin/vite.js", "--host", "127.0.0.1", "--port", "5173", "--strictPort"]);
   await Promise.all([
     waitFor("http://127.0.0.1:8010/api/projects"),
@@ -243,6 +254,111 @@ try {
     identicalBytes: true, decodedWithoutErrors: true, finalized: true
   }));
   await longContext.close();
+
+  // Refus persistant d'écriture IndexedDB après un premier fragment durable.
+  const quotaContext = await browser.newContext();
+  const quotaPage = await quotaContext.newPage();
+  await quotaPage.goto("http://127.0.0.1:5173/");
+  await quotaPage.locator(".side-nav button").filter({ hasText: "Escales" }).click();
+  await quotaPage.getByLabel("Île / projet").selectOption(slug);
+  await quotaPage.getByLabel("Titre de l’escale").fill("Escale fictive quota IndexedDB");
+  await quotaPage.getByRole("button", { name: "Démarrer l’enregistrement" }).click();
+  await quotaPage.getByRole("button", { name: "Arrêter la réunion" }).waitFor();
+  await quotaPage.locator(".markerGrid button").filter({ hasText: "Décision" }).click();
+  const beforeQuota = await waitForChunks(quotaPage, 1);
+  await quotaPage.evaluate(() => {
+    const original = IDBObjectStore.prototype.add;
+    window.__quotaRefusals = 0;
+    IDBObjectStore.prototype.add = function (value, key) {
+      if (this.name === "chunks") {
+        window.__quotaRefusals++;
+        throw new DOMException("Quota IndexedDB fictif", "QuotaExceededError");
+      }
+      return key === undefined ? original.call(this, value) : original.call(this, value, key);
+    };
+  });
+  await quotaPage.getByText("Audio à récupérer :", { exact: false }).waitFor({ timeout: 15000 });
+  assert.equal(await quotaPage.getByRole("button", { name: "Arrêter la réunion" }).count(), 0,
+    "La capture doit s'arrêter après le refus du stockage.");
+  const quotaRefusals = await quotaPage.evaluate(() => window.__quotaRefusals);
+  assert.ok(quotaRefusals >= 2, "Le dernier événement doit aussi tenter sa conservation.");
+  const afterQuota = await snapshotAudio(quotaPage);
+  assert.deepEqual(afterQuota.chunks, beforeQuota.chunks);
+  assert.deepEqual(afterQuota.markers, beforeQuota.markers);
+  assert.equal(afterQuota.session.count, beforeQuota.session.count);
+  assert.equal(afterQuota.session.finalizedCapture, false);
+  const quotaMeetingDir = path.join(meetingsRoot, afterQuota.session.meetingDirName);
+  assert.equal(fs.readdirSync(quotaMeetingDir).some((name) => name.startsWith("audio_original.")), false);
+  await quotaPage.reload();
+  await quotaPage.locator(".side-nav button").filter({ hasText: "Escales" }).click();
+  await quotaPage.getByRole("button", { name: "Exporter les fragments audio (secours)" }).waitFor();
+  const reloadedQuota = await snapshotAudio(quotaPage);
+  assert.deepEqual(reloadedQuota.chunks, beforeQuota.chunks);
+  assert.deepEqual(reloadedQuota.markers, beforeQuota.markers);
+  const quotaDownloadReady = quotaPage.waitForEvent("download");
+  await quotaPage.getByRole("button", { name: "Exporter les fragments audio (secours)" }).click();
+  const quotaFile = path.join(home, "quota secours fictif.bin");
+  await (await quotaDownloadReady).saveAs(quotaFile);
+  assert.equal(createHash("sha256").update(fs.readFileSync(quotaFile)).digest("hex"), beforeQuota.joinedSha256);
+  const quotaDecode = spawnSync("ffmpeg", ["-v", "error", "-i", quotaFile, "-f", "null", "-"], { encoding: "utf8" });
+  assert.equal(quotaDecode.status, 0, quotaDecode.stderr);
+  assert.deepEqual((await snapshotAudio(quotaPage)).chunks, beforeQuota.chunks);
+  console.log("RESULTAT_QUOTA_INDEXEDDB_FIREFOX", JSON.stringify({
+    quotaRefusals, retained: afterQuota.chunks.length, stoppedAutomatically: true,
+    identicalBytes: true, emergencyAudioDecoded: true, finalized: false
+  }));
+  await quotaContext.close();
+
+  // Arrêt réel du backend, avec un fragment déjà reçu sur disque.
+  const restartContext = await browser.newContext();
+  const restartPage = await restartContext.newPage();
+  await restartPage.goto("http://127.0.0.1:5173/");
+  await restartPage.locator(".side-nav button").filter({ hasText: "Escales" }).click();
+  await restartPage.getByLabel("Île / projet").selectOption(slug);
+  await restartPage.getByLabel("Titre de l’escale").fill("Escale fictive arrêt backend");
+  await restartPage.getByRole("button", { name: "Démarrer l’enregistrement" }).click();
+  await restartPage.getByRole("button", { name: "Arrêter la réunion" }).waitFor();
+  const beforeBackendStop = await waitForChunks(restartPage, 1);
+  const restartMeetingDir = path.join(meetingsRoot, beforeBackendStop.session.meetingDirName);
+  const firstServerChunk = path.join(restartMeetingDir, "audio_chunks", "chunk_000000.part");
+  const uploadDeadline = Date.now() + 10000;
+  let firstServerHash;
+  do {
+    if (fs.existsSync(firstServerChunk)) firstServerHash = createHash("sha256").update(fs.readFileSync(firstServerChunk)).digest("hex");
+    if (firstServerHash === beforeBackendStop.chunks[0].sha256) break;
+    await delay(50);
+  } while (Date.now() < uploadDeadline);
+  assert.equal(firstServerHash, beforeBackendStop.chunks[0].sha256, "Le premier fragment doit être entièrement reçu avant la panne.");
+  const exited = new Promise((resolve) => backend.once("exit", (code, signal) => resolve({ code, signal })));
+  backend.kill("SIGKILL");
+  assert.equal((await exited).signal, "SIGKILL");
+  await restartPage.locator(".markerGrid button").filter({ hasText: "Action" }).click();
+  await waitForChunks(restartPage, 3);
+  await restartPage.getByRole("button", { name: "Arrêter la réunion" }).click();
+  await restartPage.getByText("Audio à récupérer :", { exact: false }).waitFor({ timeout: 20000 });
+  const queuedAfterStop = await snapshotAudio(restartPage);
+  assert.equal(queuedAfterStop.session.finalizedCapture, true);
+  assert.equal(queuedAfterStop.markers.length, 1);
+  assert.equal(fs.readdirSync(restartMeetingDir).some((name) => name.startsWith("audio_original.")), false);
+  backend = launch(process.execPath, ["backend/server.js"], { HOME: home });
+  await waitFor("http://127.0.0.1:8010/api/projects");
+  await restartPage.getByRole("button", { name: "Reprendre la sauvegarde audio" }).click();
+  await restartPage.getByText("Blocs audio récupérés et finalisés. Vérifiez l'écoute.", { exact: false }).waitFor({ timeout: 30000 });
+  const restartOriginals = fs.readdirSync(restartMeetingDir).filter((name) => name.startsWith("audio_original."));
+  assert.equal(restartOriginals.length, 1);
+  const restartOriginal = path.join(restartMeetingDir, restartOriginals[0]);
+  assert.equal(createHash("sha256").update(fs.readFileSync(restartOriginal)).digest("hex"), queuedAfterStop.joinedSha256);
+  assert.equal(createHash("sha256").update(fs.readFileSync(firstServerChunk)).digest("hex"), firstServerHash);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(restartMeetingDir, "donnees_escale.json"), "utf8")).markers, queuedAfterStop.markers);
+  assert.equal(await snapshotAudio(restartPage), null);
+  const restartDecode = spawnSync("ffmpeg", ["-v", "error", "-i", restartOriginal, "-f", "null", "-"], { encoding: "utf8" });
+  assert.equal(restartDecode.status, 0, restartDecode.stderr);
+  assert.equal(restartDecode.stderr.trim(), "");
+  console.log("RESULTAT_REDEMARRAGE_BACKEND_FIREFOX", JSON.stringify({
+    signal: "SIGKILL", chunks: queuedAfterStop.chunks.length, markers: queuedAfterStop.markers.length,
+    identicalBytes: true, existingChunkPreserved: true, finalized: true
+  }));
+  await restartContext.close();
 
   // Un vrai arrêt du processus, sans stop MediaRecorder ni fermeture du contexte.
   // Le profil persistant est fictif et distinct du profil personnel de Firefox.

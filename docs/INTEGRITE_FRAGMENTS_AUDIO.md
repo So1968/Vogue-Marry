@@ -78,3 +78,25 @@ conservation du fragment encore en mémoire au moment de l'arrêt, ni une panne
 électrique, ni la durabilité physique du disque, ni une réunion de plusieurs
 heures. La recette du navigateur et du microphone réels sous Windows reste à
 faire séparément.
+
+
+## Capture de deux minutes sans transfert réseau
+
+La recette Firefox de la vraie interface comprend également une capture de deux
+minutes avec refus des requêtes réunion après sa création. Trois repères
+(décision, action, question) sont ajoutés au début, après une minute et après deux
+minutes. Le test vérifie la conservation locale des fragments et des marqueurs,
+leur récupération après rechargement, puis leur transfert après rétablissement.
+
+Avant la reprise, aucun original ne doit être publié. Après confirmation serveur,
+les SHA-256 et tailles de chaque fragment sur disque et de l'original assemblé
+sont comparés aux données IndexedDB capturées avant rechargement. Le décodage
+ffmpeg doit être sans erreur, la durée doit correspondre aux deux minutes et les
+repères doivent garder leurs identifiants et positions. La session finalisée ne
+doit plus être proposée après un nouveau rechargement.
+
+Ce test ajoute une preuve sur une coupure prolongée de transfert, pas une panne
+complète du réseau du poste : la page et la création initiale de l'escale restent
+accessibles. Les résultats réellement exécutés sont consignés en CI. Deux minutes
+ne constituent pas une validation de plusieurs heures de réunion, d'une veille
+Windows ou d'un disque plein. Aucune donnée personnelle n'est utilisée.

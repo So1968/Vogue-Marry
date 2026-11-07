@@ -8,6 +8,7 @@ on:
 jobs:
   firefox-mediarecorder:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Récupérer le dépôt
         uses: actions/checkout@v4
@@ -32,5 +33,5 @@ jobs:
           ffprobe -version
       - name: Vérifier MediaRecorder Firefox par tranches de 5 secondes
         run: node scripts/validate-firefox-mediarecorder.mjs
-      - name: Parcours réel Firefox escale, microphone, sauvegarde
+      - name: Parcours Firefox, coupure prolongée et arrêt du processus
         run: node scripts/validate-firefox-ui-meeting.mjs

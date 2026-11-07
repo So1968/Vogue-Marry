@@ -73,6 +73,40 @@ microphone.
 
 Restent à recetter sous Windows : microphone et navigateur du poste, transcription
 Faster-Whisper/Pyannote sur un audio synthétique, longue réunion, reprise après panne,
-et sauvegarde/restauration chiffrée. Les scripts d'archives utilisent actuellement
-des options GNU tar ; leur fonctionnement avec le tar fourni par Windows n'est
-pas encore validé et n'est pas revendiqué par cette adaptation du démarrage.
+et récupération des sauvegardes réelles du poste. Le parcours de sauvegarde est
+également couvert par un test natif synthétique décrit ci-dessous.
+
+## Sauvegardes sous Windows
+
+Les sauvegardes exigent **GNU tar**, notamment pour comparer les octets archivés
+aux sources. Le `tar.exe` intégré à Windows (bsdtar) ne suffit pas. Installer
+Git for Windows depuis sa distribution officielle si GNU tar n'est pas déjà
+présent. Aucun WSL ni terminal Git Bash n'est requis.
+
+Les scripts essaient le tar du PATH, puis les emplacements usuels
+`Git\usr\bin\tar.exe` de Program Files et LOCALAPPDATA. Pour une installation
+personnalisée, définir le chemin complet, sans options :
+
+```powershell
+$env:VOGUE_TAR_PATH = 'D:\Outils\Git\usr\bin\tar.exe'
+```
+
+L'outil est contrôlé avant création de la destination. S'il est absent ou
+incompatible, la commande s'arrête avec une consigne d'installation ; elle
+n'utilise pas un archivage moins vérifié. Aucun outil n'est téléchargé par ces
+scripts. Les lettres de lecteurs et chemins contenant des espaces sont transmis
+comme arguments séparés, sans shell.
+
+Pour lancer la recette exclusivement fictive depuis le dépôt :
+
+```powershell
+node --test tests/backup-runtime.test.mjs
+```
+
+Cette recette crée un dossier temporaire isolé, vérifie une archive claire,
+une archive directement chiffrée, le refus d'une mauvaise phrase secrète et d'une
+altération, puis le déchiffrement et l'extraction de contrôle. Elle conserve les
+sources et nettoie uniquement ses données fictives. Elle ne valide ni votre
+support de sauvegarde réel, ni une récupération après panne physique. Voir
+[la procédure de sauvegarde](SAUVEGARDES_SECURITE.md) avant d'utiliser les données
+réelles. Les archives déchiffrées sont des données en clair à protéger.

@@ -6,12 +6,13 @@ import { sourceManifest, requireUnchangedSource, compareBackupToSource } from ".
 import os from "node:os";
 import path from "node:path";
 import { randomUUID, randomBytes, scryptSync, createCipheriv } from "node:crypto";
-import { spawn } from "node:child_process";
+import { spawnTar, tarRuntime } from "./lib/tar-runtime.mjs";
 import { pipeline } from "node:stream/promises";
 import { prepareBackupDestination, checkBackupSource, publishBackup } from "./lib/backup-safety.mjs";
 
 const passphrase = process.env.VOGUE_BACKUP_PASSPHRASE || "";
 if (passphrase.length < 16) throw new Error("VOGUE_BACKUP_PASSPHRASE doit contenir au moins 16 caractères.");
+tarRuntime();
 const source = path.join(os.homedir(), "VOGUE-MERRY-DONNEES");
 const destination = path.resolve(process.argv[2] || path.join(os.homedir(), "VOGUE-MERRY-SAUVEGARDES"));
 if (!fs.existsSync(source) || !fs.statSync(source).isDirectory()) throw new Error("Données absentes : " + source);
@@ -26,7 +27,7 @@ const header = Buffer.concat([Buffer.from("VMBACK01"), randomBytes(16), randomBy
 const key = scryptSync(passphrase, header.subarray(8, 24), 32);
 const cipher = createCipheriv("aes-256-gcm", key, header.subarray(24, 36));
 cipher.setAAD(header);
-const tar = spawn("tar", ["--hard-dereference", "-czf", "-", "-C", path.dirname(source), path.basename(source)], {
+const tar = spawnTar(["--hard-dereference", "-czf", "-", "-C", path.dirname(source), path.basename(source)], {
   stdio: ["ignore", "pipe", "pipe"]
 });
 let stderr = "";

@@ -3,6 +3,17 @@
 Les commandes ci-dessous sont **manuelles**. Elles ne modifient pas le dossier
 `~/VOGUE-MERRY-DONNEES` et ne remplacent pas une sauvegarde automatisée.
 
+## Outil d'archivage requis
+
+Les scripts contrôlent la présence de GNU tar avant de créer leur destination.
+Le tar fourni avec Windows ne propose pas tous les contrôles requis ; GNU tar
+fourni avec Git for Windows est recherché automatiquement aux emplacements
+usuels. Une installation personnalisée peut être indiquée par `VOGUE_TAR_PATH`
+(chemin d'exécutable, sans arguments). Le dossier de cet outil est ajouté au PATH
+uniquement pour ses sous-processus, notamment gzip. Aucun téléchargement
+ni repli vers une comparaison moins stricte n'est effectué. Voir
+[les instructions Windows](INSTALLATION_WINDOWS.md#sauvegardes-sous-windows).
+
 ## Méthode recommandée : archive directement chiffrée
 
 Pour éviter une archive temporaire non chiffrée, privilégier la commande suivante

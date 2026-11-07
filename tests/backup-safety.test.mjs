@@ -70,7 +70,7 @@ test("archive claire : temporaire privé dès sa création et liens physiques re
   fs.mkdirSync(bin);
   const modeFile = path.join(home, "mode-temporaire");
   // Observer les droits avant l'écriture de tar, pas seulement ceux du résultat final.
-  fs.writeFileSync(path.join(bin, "tar"), '#!/bin/sh\nif [ "$1" = "--create" ]; then stat -c %a "$5" > "$VOGUE_TEST_MODE_FILE"; fi\nexec /usr/bin/tar "$@"\n', { mode: 0o700 });
+  fs.writeFileSync(path.join(bin, "tar"), '#!/bin/sh\ncase "$*" in *--create*) previous=""; for arg do if [ "$previous" = "--file" ]; then stat -c %a "$arg" > "$VOGUE_TEST_MODE_FILE"; fi; previous="$arg"; done;; esac\nexec /usr/bin/tar "$@"\n', { mode: 0o700 });
   const run = spawnSync(process.execPath, [scripts[0]], {
     env: { ...env, PATH: `${bin}:${env.PATH}`, VOGUE_TEST_MODE_FILE: modeFile }, encoding: "utf8"
   });

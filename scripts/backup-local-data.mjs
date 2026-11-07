@@ -7,8 +7,9 @@ import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { prepareBackupDestination, checkBackupSource, sha256File, publishBackup } from "./lib/backup-safety.mjs";
-import { spawnSync } from "node:child_process";
+import { spawnTarSync, tarRuntime } from "./lib/tar-runtime.mjs";
 
+tarRuntime();
 const source = path.join(os.homedir(), "VOGUE-MERRY-DONNEES");
 const destination = path.resolve(process.argv[2] || path.join(os.homedir(), "VOGUE-MERRY-SAUVEGARDES"));
 if (!fs.existsSync(source) || !fs.statSync(source).isDirectory()) {
@@ -22,12 +23,12 @@ const target = path.join(destination, "vogue-merry-" + stamp + "-" + randomUUID(
 const temporary = target + ".partial";
 try {
   fs.writeFileSync(temporary, "", { flag: "wx", mode: 0o600 });
-  const proc = spawnSync("tar", [
+  const proc = spawnTarSync([
     "--create", "--gzip", "--hard-dereference", "--file", temporary,
     "--directory", path.dirname(source), path.basename(source)
   ], { encoding: "utf8", timeout: 120_000 });
   if (proc.status !== 0) throw new Error("Archive impossible : " + (proc.stderr || proc.error?.message || proc.status));
-  const check = spawnSync("tar", ["--list", "--gzip", "--file", temporary], { encoding: "utf8", timeout: 120_000 });
+  const check = spawnTarSync(["--list", "--gzip", "--file", temporary], { encoding: "utf8", timeout: 120_000 });
   if (check.status !== 0 || !check.stdout.includes("VOGUE-MERRY-DONNEES/")) {
     throw new Error("Archive illisible ou contenu inattendu.");
   }

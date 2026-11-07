@@ -211,6 +211,7 @@ try {
   const reloaded = await snapshotAudio(longPage);
   assert.deepEqual(reloaded.chunks, queued.chunks);
   assert.deepEqual(reloaded.markers, queued.markers);
+  const outageEnd = Date.now();
   await longPage.unroute("**/api/meetings/**");
   await longPage.getByRole("button", { name: "Reprendre la sauvegarde audio" }).click();
   await longPage.getByText("Blocs audio récupérés et finalisés. Vérifiez l'écoute.", { exact: false }).waitFor({ timeout: 30000 });
@@ -237,7 +238,7 @@ try {
   await longPage.locator(".side-nav button").filter({ hasText: "Escales" }).click();
   assert.equal(await snapshotAudio(longPage), null, "Une session finalisée ne doit pas réapparaître au rechargement.");
   console.log("RESULTAT_COUPURE_PROLONGEE_FIREFOX", JSON.stringify({
-    outageSeconds: (Date.now() - outageStart) / 1000, audioSeconds: duration,
+    outageSeconds: (outageEnd - outageStart) / 1000, audioSeconds: duration,
     chunks: queued.chunks.length, markers: longMeta.markers.length, blockedTransfers,
     identicalBytes: true, decodedWithoutErrors: true, finalized: true
   }));

@@ -7,6 +7,7 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { firefox } from "playwright";
+import { createHash } from "node:crypto";
 
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "vogue-e2e-ui-"));
 const children = [];
@@ -172,6 +173,77 @@ try {
     escales: finalMeetingFolders.length, audio: originals[0], markers: meta.markers.length, title, blockedSessionWrites
   }));
 
+  // Deux minutes de capture avec tous les transferts réunion indisponibles.
+  const longContext = await browser.newContext();
+  const longPage = await longContext.newPage();
+  await longPage.goto("http://127.0.0.1:5173/");
+  await longPage.locator(".side-nav button").filter({ hasText: "Escales" }).click();
+  await longPage.getByLabel("Île / projet").selectOption(slug);
+  await longPage.getByLabel("Titre de l’escale").fill("Escale fictive coupure de deux minutes");
+  await longPage.getByRole("button", { name: "Démarrer l’enregistrement" }).click();
+  await longPage.getByRole("button", { name: "Arrêter la réunion" }).waitFor({ timeout: 10000 });
+  let blockedTransfers = 0;
+  await longPage.route("**/api/meetings/**", (route) => {
+    blockedTransfers++;
+    return route.abort("failed");
+  });
+  const outageStart = Date.now();
+  for (const [index, label] of ["Décision", "Action", "Question"].entries()) {
+    const remaining = outageStart + index * 60000 - Date.now();
+    if (remaining > 0) await delay(remaining);
+    await longPage.locator(".markerGrid button").filter({ hasText: label }).click();
+  }
+  await longPage.getByRole("button", { name: "Arrêter la réunion" }).click();
+  await longPage.getByText("Audio à récupérer :", { exact: false }).waitFor({ timeout: 20000 });
+  const queued = await snapshotAudio(longPage);
+  assert.equal(queued.session.finalizedCapture, true);
+  assert.ok(queued.chunks.length >= 20, "Une capture de deux minutes doit produire de nombreuses tranches réelles.");
+  assert.deepEqual(queued.chunks.map((chunk) => chunk.index), queued.chunks.map((_, index) => index));
+  assert.equal(queued.session.count, queued.chunks.length);
+  assert.deepEqual(queued.markers.map((marker) => marker.type), ["decision", "action", "question"]);
+  assert.ok(queued.markers[1].timeSeconds >= 55 && queued.markers[2].timeSeconds >= 115);
+  assert.ok(blockedTransfers >= 4, "La coupure doit réellement refuser audio et marqueurs.");
+  const longMeetingDir = path.join(meetingsRoot, queued.session.meetingDirName);
+  assert.equal(fs.readdirSync(longMeetingDir).some((name) => name.startsWith("audio_original.")), false);
+  await longPage.reload();
+  await longPage.locator(".side-nav button").filter({ hasText: "Escales" }).click();
+  await longPage.getByRole("button", { name: "Reprendre la sauvegarde audio" }).waitFor();
+  const reloaded = await snapshotAudio(longPage);
+  assert.deepEqual(reloaded.chunks, queued.chunks);
+  assert.deepEqual(reloaded.markers, queued.markers);
+  const outageEnd = Date.now();
+  await longPage.unroute("**/api/meetings/**");
+  await longPage.getByRole("button", { name: "Reprendre la sauvegarde audio" }).click();
+  await longPage.getByText("Blocs audio récupérés et finalisés. Vérifiez l'écoute.", { exact: false }).waitFor({ timeout: 30000 });
+  const longOriginals = fs.readdirSync(longMeetingDir).filter((name) => name.startsWith("audio_original."));
+  assert.equal(longOriginals.length, 1);
+  const longOriginal = path.join(longMeetingDir, longOriginals[0]);
+  assert.equal(createHash("sha256").update(fs.readFileSync(longOriginal)).digest("hex"), queued.joinedSha256);
+  for (const chunk of queued.chunks) {
+    const file = path.join(longMeetingDir, "audio_chunks", `chunk_${String(chunk.index).padStart(6, "0")}.part`);
+    assert.equal(fs.statSync(file).size, chunk.size);
+    assert.equal(createHash("sha256").update(fs.readFileSync(file)).digest("hex"), chunk.sha256);
+  }
+  const longMeta = JSON.parse(fs.readFileSync(path.join(longMeetingDir, "donnees_escale.json"), "utf8"));
+  assert.deepEqual(longMeta.markers, queued.markers, "Les repères et leurs positions restent identiques après reprise.");
+  const probe = spawnSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "json", longOriginal], { encoding: "utf8" });
+  assert.equal(probe.status, 0, probe.stderr);
+  const duration = Number(JSON.parse(probe.stdout).format.duration);
+  assert.ok(duration >= 119 && duration < 150, `Durée audio de reprise inattendue : ${duration}`);
+  const longDecode = spawnSync("ffmpeg", ["-v", "error", "-i", longOriginal, "-f", "null", "-"], { encoding: "utf8" });
+  assert.equal(longDecode.status, 0, longDecode.stderr);
+  assert.equal(longDecode.stderr.trim(), "", "Le décodage ne doit signaler aucune erreur.");
+  assert.equal(await snapshotAudio(longPage), null, "Le nettoyage local attend la finalisation confirmée.");
+  await longPage.reload();
+  await longPage.locator(".side-nav button").filter({ hasText: "Escales" }).click();
+  assert.equal(await snapshotAudio(longPage), null, "Une session finalisée ne doit pas réapparaître au rechargement.");
+  console.log("RESULTAT_COUPURE_PROLONGEE_FIREFOX", JSON.stringify({
+    outageSeconds: (outageEnd - outageStart) / 1000, audioSeconds: duration,
+    chunks: queued.chunks.length, markers: longMeta.markers.length, blockedTransfers,
+    identicalBytes: true, decodedWithoutErrors: true, finalized: true
+  }));
+  await longContext.close();
+
   // Un vrai arrêt du processus, sans stop MediaRecorder ni fermeture du contexte.
   // Le profil persistant est fictif et distinct du profil personnel de Firefox.
   const profile = path.join(home, "profil firefox fictif");
@@ -233,7 +305,6 @@ try {
   const download = await downloadReady;
   const recoveredFile = path.join(home, "audio secours fictif.bin");
   await download.saveAs(recoveredFile);
-  const { createHash } = await import("node:crypto");
   assert.equal(createHash("sha256").update(fs.readFileSync(recoveredFile)).digest("hex"), before.joinedSha256);
   const decoded = spawnSync("ffmpeg", ["-v", "error", "-i", recoveredFile, "-f", "null", "-"], { encoding: "utf8" });
   assert.equal(decoded.status, 0, decoded.stderr);

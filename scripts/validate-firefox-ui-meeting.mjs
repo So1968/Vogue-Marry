@@ -190,13 +190,14 @@ try {
   await crashPage.getByRole("button", { name: "Démarrer l’enregistrement" }).click();
   await crashPage.getByRole("button", { name: "Arrêter la réunion" }).waitFor({ timeout: 10000 });
   await crashPage.locator(".markerGrid button").filter({ hasText: "Décision" }).click();
-  await crashPage.waitForFunction(async () => {
-    const { recoverDurableAudioSession, pendingAudioChunks } = await import("/src/lib/audio-chunk-queue.js");
-    const session = await recoverDurableAudioSession();
-    return session && (await pendingAudioChunks(session.sessionId)).length >= 3;
-  }, null, { timeout: 30000 });
-  const before = await snapshotAudio(crashPage);
-  assert.ok(before.chunks.length >= 3);
+  let before;
+  const deadline = Date.now() + 30000;
+  do {
+    before = await snapshotAudio(crashPage);
+    if (before?.chunks.length >= 3) break;
+    await delay(250);
+  } while (Date.now() < deadline);
+  assert.ok(before?.chunks.length >= 3, "Trois transactions de fragments doivent être confirmées avant SIGKILL.");
   assert.equal(before.session.finalizedCapture, false);
   assert.equal(before.markers.length, 1);
   const closed = crashContext.waitForEvent("close", { timeout: 15000 });

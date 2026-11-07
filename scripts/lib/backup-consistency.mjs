@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { createDecipheriv } from "node:crypto";
-import { spawn } from "node:child_process";
+import { spawnTar } from "./tar-runtime.mjs";
 import { pipeline } from "node:stream/promises";
 import { sha256File } from "./backup-safety.mjs";
 
@@ -36,7 +36,7 @@ export async function requireUnchangedSource(source, before) {
 // Comparaison des octets archivés avec la source, sans extraction ni fichier clair
 // intermédiaire, y compris pour la sauvegarde AES-GCM directement chiffrée.
 export async function compareBackupToSource(source, archive, encryption = null) {
-  const tar = spawn("tar", ["--compare", "--gzip", "--file", "-", "--directory", path.dirname(source)], {
+  const tar = spawnTar(["--compare", "--gzip", "--file", "-", "--directory", path.dirname(source)], {
     stdio: ["pipe", "ignore", "pipe"]
   });
   let stderr = "";

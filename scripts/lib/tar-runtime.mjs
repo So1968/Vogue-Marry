@@ -28,10 +28,19 @@ export function tarRuntime() {
 
 export function spawnTar(args, options = {}) {
   const { command, env } = tarRuntime();
-  return spawn(command, ["--force-local", ...args], { ...options, env, windowsHide: true });
+  return spawn(command, argumentsForTar(args), { ...options, env, windowsHide: true });
 }
 
 export function spawnTarSync(args, options = {}) {
   const { command, env } = tarRuntime();
-  return spawnSync(command, ["--force-local", ...args], { ...options, env, windowsHide: true });
+  return spawnSync(command, argumentsForTar(args), { ...options, env, windowsHide: true });
+}
+
+function argumentsForTar(args) {
+  return ["--force-local", ...args.map((value) => {
+    if (process.platform !== "win32" || !path.win32.isAbsolute(value)) return value;
+    // GNU tar de Git for Windows utilise les chemins MSYS, même sans shell.
+    const portable = value.replaceAll("\\", "/");
+    return portable.replace(/^([a-z]):\//iu, (_, drive) => `/${drive.toLowerCase()}/`);
+  })];
 }

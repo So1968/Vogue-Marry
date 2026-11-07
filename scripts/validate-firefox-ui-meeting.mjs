@@ -204,7 +204,18 @@ try {
   const killedPid = killOwnedFirefox(profile);
   await closed;
   crashContext = null;
-  assert.throws(() => process.kill(killedPid, 0), { code: "ESRCH" });
+  // La fermeture du transport Playwright peut précéder la collecte du PID.
+  let processGone = false;
+  for (let attempt = 0; attempt < 100; attempt++) {
+    try { process.kill(killedPid, 0); }
+    catch (error) {
+      if (error.code !== "ESRCH") throw error;
+      processGone = true;
+      break;
+    }
+    await delay(50);
+  }
+  assert.equal(processGone, true, "Le PID Firefox doit avoir disparu avant sa relance.");
   crashContext = await launchPersistent();
   crashPage = await crashContext.newPage();
   await crashPage.goto("http://127.0.0.1:5173/");

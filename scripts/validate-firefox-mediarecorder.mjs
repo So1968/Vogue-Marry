@@ -149,7 +149,7 @@ try {
         }
       }, 100);
     });
-    // Ne pas appeler recorder.stop() : la page va être fermée brutalement.
+    // Ne pas appeler recorder.stop() : la page sera fermée sans arrêt explicite.
     return { persisted: written, mimeType: recorder.mimeType };
   });
   await crashPage.close();
@@ -178,13 +178,13 @@ try {
   });
   await recoveryPage.close();
   if (recovered.count < recorded.persisted || recovered.sizes.some((size) => size === 0)) {
-    fail("Fermeture brutale : blocs IndexedDB perdus ou vides.");
+    fail("Fermeture d’onglet : blocs IndexedDB perdus ou vides.");
   }
   const emergencyPath = "/tmp/vogue-firefox-crash-recovery.bin";
   fs.writeFileSync(emergencyPath, Buffer.from(recovered.base64, "base64"));
   const recoveredMedia = probeFile(emergencyPath);
-  if (!(recoveredMedia.measured > 1)) fail("Fermeture brutale : aucun audio lisible récupéré.");
-  console.log("RESULTAT_FERMETURE_BRUTALE", JSON.stringify({
+  if (!(recoveredMedia.measured > 1)) fail("Fermeture d’onglet : aucun audio lisible récupéré.");
+  console.log("RESULTAT_FERMETURE_ONGLET", JSON.stringify({
     persistedBeforeClose: recorded.persisted,
     recoveredAfterReopen: recovered.count,
     recoveredSeconds: recoveredMedia.measured,

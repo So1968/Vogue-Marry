@@ -4,13 +4,46 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { firefox } from "playwright";
 
 const home = fs.mkdtempSync(path.join(os.tmpdir(), "vogue-e2e-ui-"));
 const children = [];
 let browser;
+let crashContext;
+
+async function snapshotAudio(page) {
+  return page.evaluate(async () => {
+    const { recoverDurableAudioSession, pendingAudioChunks } = await import("/src/lib/audio-chunk-queue.js");
+    const { recoverLocalMarkers } = await import("/src/lib/meeting-marker-backup.js");
+    const session = await recoverDurableAudioSession();
+    if (!session) return null;
+    const chunks = await pendingAudioChunks(session.sessionId);
+    const digest = async (blob) => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer())))
+      .map((byte) => byte.toString(16).padStart(2, "0")).join("");
+    return {
+      session,
+      chunks: await Promise.all(chunks.map(async (chunk) => ({ index: chunk.index, size: chunk.blob.size, sha256: await digest(chunk.blob) }))),
+      joinedSha256: await digest(new Blob(chunks.map((chunk) => chunk.blob))),
+      markers: recoverLocalMarkers(session.sessionId)
+    };
+  });
+}
+
+function killOwnedFirefox(profile) {
+  assert.equal(process.platform, "linux", "Cette recette SIGKILL utilise /proc sous Linux.");
+  const pids = fs.readFileSync(`/proc/${process.pid}/task/${process.pid}/children`, "utf8").trim().split(/\s+/u).filter(Boolean);
+  const matches = pids.filter((pid) => {
+    try {
+      const args = fs.readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0");
+      return args.includes(profile) && path.basename(args[0]).startsWith("firefox");
+    } catch { return false; }
+  });
+  assert.equal(matches.length, 1, "Interrompre uniquement le Firefox enfant de cette recette et son profil jetable.");
+  process.kill(Number(matches[0]), "SIGKILL");
+  return Number(matches[0]);
+}
 function launch(cmd, args, env) {
   const child = spawn(cmd, args, { cwd: process.cwd(), env: { ...process.env, ...env }, stdio: ["ignore", "pipe", "pipe"] });
   children.push(child);
@@ -138,7 +171,70 @@ try {
   console.log("RESULTAT_INTERFACE_FIREFOX", JSON.stringify({
     escales: finalMeetingFolders.length, audio: originals[0], markers: meta.markers.length, title, blockedSessionWrites
   }));
+
+  // Un vrai arrêt du processus, sans stop MediaRecorder ni fermeture du contexte.
+  // Le profil persistant est fictif et distinct du profil personnel de Firefox.
+  const profile = path.join(home, "profil firefox fictif");
+  const launchPersistent = () => firefox.launchPersistentContext(profile, {
+    headless: true,
+    firefoxUserPrefs: { "media.navigator.streams.fake": true, "media.navigator.permission.disabled": true }
+  });
+  crashContext = await launchPersistent();
+  let crashPage = await crashContext.newPage();
+  await crashPage.goto("http://127.0.0.1:5173/");
+  await crashPage.locator(".side-nav button").filter({ hasText: "Escales" }).click();
+  await crashPage.route("**/api/meetings/audio-chunk", (route) => route.abort("failed"));
+  await crashPage.route("**/api/meetings/save-markers", (route) => route.abort("failed"));
+  await crashPage.getByLabel("Île / projet").selectOption(slug);
+  await crashPage.getByLabel("Titre de l’escale").fill("Escale fictive interruption processus");
+  await crashPage.getByRole("button", { name: "Démarrer l’enregistrement" }).click();
+  await crashPage.getByRole("button", { name: "Arrêter la réunion" }).waitFor({ timeout: 10000 });
+  await crashPage.locator(".markerGrid button").filter({ hasText: "Décision" }).click();
+  await crashPage.waitForFunction(async () => {
+    const { recoverDurableAudioSession, pendingAudioChunks } = await import("/src/lib/audio-chunk-queue.js");
+    const session = await recoverDurableAudioSession();
+    return session && (await pendingAudioChunks(session.sessionId)).length >= 3;
+  }, null, { timeout: 30000 });
+  const before = await snapshotAudio(crashPage);
+  assert.ok(before.chunks.length >= 3);
+  assert.equal(before.session.finalizedCapture, false);
+  assert.equal(before.markers.length, 1);
+  const closed = crashContext.waitForEvent("close", { timeout: 15000 });
+  const killedPid = killOwnedFirefox(profile);
+  await closed;
+  crashContext = null;
+  assert.throws(() => process.kill(killedPid, 0), { code: "ESRCH" });
+  crashContext = await launchPersistent();
+  crashPage = await crashContext.newPage();
+  await crashPage.goto("http://127.0.0.1:5173/");
+  await crashPage.locator(".side-nav button").filter({ hasText: "Escales" }).click();
+  await crashPage.getByRole("button", { name: "Exporter les fragments audio (secours)" }).waitFor({ timeout: 15000 });
+  const after = await snapshotAudio(crashPage);
+  assert.equal(after.session.sessionId, before.session.sessionId);
+  assert.equal(after.session.finalizedCapture, false);
+  assert.deepEqual(after.chunks, before.chunks, "Chaque fragment validé doit survivre avec ses octets et son indice.");
+  assert.deepEqual(after.markers, before.markers);
+  await crashPage.getByRole("button", { name: "Reprendre la sauvegarde audio" }).click();
+  await crashPage.getByText("La récupération partielle nécessite une validation spécifique.", { exact: false }).waitFor();
+  const downloadReady = crashPage.waitForEvent("download");
+  await crashPage.getByRole("button", { name: "Exporter les fragments audio (secours)" }).click();
+  const download = await downloadReady;
+  const recoveredFile = path.join(home, "audio secours fictif.bin");
+  await download.saveAs(recoveredFile);
+  const { createHash } = await import("node:crypto");
+  assert.equal(createHash("sha256").update(fs.readFileSync(recoveredFile)).digest("hex"), before.joinedSha256);
+  const decoded = spawnSync("ffmpeg", ["-v", "error", "-i", recoveredFile, "-f", "null", "-"], { encoding: "utf8" });
+  assert.equal(decoded.status, 0, decoded.stderr);
+  const interruptedDir = path.join(meetingsRoot, before.session.meetingDirName);
+  assert.equal(fs.readdirSync(interruptedDir).some((name) => name.startsWith("audio_original.")), false,
+    "Un export partiel ne doit pas être présenté comme un original finalisé.");
+  assert.deepEqual((await snapshotAudio(crashPage)).chunks, before.chunks, "L'export conserve les fragments locaux.");
+  console.log("RESULTAT_INTERRUPTION_PROCESSUS_FIREFOX", JSON.stringify({
+    signal: "SIGKILL", persisted: before.chunks.length, recovered: after.chunks.length,
+    identicalBytes: true, markers: after.markers.length, emergencyAudioDecoded: true, finalized: false
+  }));
 } finally {
+  if (crashContext) await crashContext.close();
   if (browser) await browser.close();
   for (const child of children) child.kill("SIGTERM");
   await delay(300);

@@ -54,3 +54,27 @@ passage à la nouvelle version de la base.
 Les tests de transactions utilisent fake-indexeddb et des Blob synthétiques :
 ils ne remplacent pas la recette Firefox sur un vrai profil navigateur, ni les
 pannes physiques de disque, ni les garanties de durabilité du système d'exploitation.
+
+## Recette d'interruption du processus Firefox
+
+Le scénario de fermeture d'onglet de `validate-firefox-mediarecorder.mjs` reste
+un contrôle distinct : il ne simule pas un arrêt du navigateur ni du système.
+`validate-firefox-ui-meeting.mjs` ajoute une recette Linux par SIGKILL, sur un
+profil Firefox persistant temporaire et un HOME exclusivement fictif. Le
+processus ciblé doit être un enfant direct du test portant le chemin exact de
+ce profil ; aucun navigateur personnel n'est recherché ou arrêté.
+
+Dans la vraie interface, les envois audio et marqueurs sont interrompus pendant
+la capture. Après au moins trois fragments confirmés dans IndexedDB, le test
+relève leurs indices, tailles et SHA-256, puis interrompt le processus sans
+appeler MediaRecorder.stop() ou context.close(). Il rouvre le même profil et
+compare les fragments et marqueurs récupérés. L'export de secours est comparé
+aux octets capturés et décodé par ffmpeg. Les fragments restent conservés après
+export et aucune capture incomplète ne doit être présentée comme un original
+finalisé. Les résultats effectifs sont consignés dans la PR et les journaux CI.
+
+Ce scénario court utilise le faux microphone Firefox. Il ne démontre ni la
+conservation du fragment encore en mémoire au moment de l'arrêt, ni une panne
+électrique, ni la durabilité physique du disque, ni une réunion de plusieurs
+heures. La recette du navigateur et du microphone réels sous Windows reste à
+faire séparément.

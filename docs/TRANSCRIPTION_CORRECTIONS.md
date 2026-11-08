@@ -67,3 +67,30 @@ Les tests lancent de vrais sous-processus Node avec des événements fictifs :
 ils contrôlent le contrat de transport, pas la justesse acoustique de Whisper,
 la séparation réelle des voix par Pyannote ou la qualité du microphone Windows.
 Aucun modèle cloud n'est appelé par cette validation.
+
+## Tâches interrompues après redémarrage
+
+Un ancien état `queued`, `transcribing`, `diarizing` ou `verifying` sur disque ne
+prouve pas qu'un traitement existe encore. Le moteur conserve désormais un
+registre des tâches acceptées par son processus. Une tâche sans exécution active
+est présentée par l'API avec `state: error`, `interrupted: true`, une progression
+remise à zéro et une consigne de relance ; aucun résultat terminé n'est annoncé.
+Cette lecture ne réécrit pas le statut historique, l'audio ou les corrections.
+
+Le cache ne renvoie plus `already-running` pour ces anciennes tâches. Une nouvelle
+soumission explicite crée une nouvelle tâche et conserve l'ancienne. Les tâches
+réellement actives restent réutilisables et les résultats `done` avec leur fichier
+résultat continuent à être servis depuis le cache, corrections humaines incluses.
+Il n'y a pas de redémarrage automatique d'un calcul ni d'envoi cloud automatique.
+Une seule instance du moteur doit être utilisée par mémoire locale ; plusieurs
+tâches peuvent être suivies par cette instance.
+
+Le registre est nettoyé même si l'enregistrement de l'état d'échec rencontre une
+erreur. Cette erreur ne doit pas provoquer un rejet asynchrone non traité ni
+maintenir indéfiniment une tâche fictivement active.
+
+La recette utilise des métadonnées et audios fictifs, un arrêt SIGKILL du vrai
+backend, puis son redémarrage. Elle vérifie les quatre anciens états, la création
+d'une nouvelle tâche, l'intégrité de l'ancien audio et du statut historique, ainsi
+que le maintien en cache d'une transcription corrigée. Elle ne lance pas Whisper
+ou Pyannote et ne valide pas leur précision acoustique.

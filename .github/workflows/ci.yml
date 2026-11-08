@@ -61,7 +61,7 @@ jobs:
       - name: Installer les dépendances verrouillées
         run: npm ci
       - name: Vérifier les chemins, ACL et services natifs Windows
-        run: node --test --test-concurrency=1 tests/platform-runtime.test.mjs tests/backend-path-guards.test.mjs tests/windows-runtime.test.mjs tests/backup-runtime.test.mjs tests/json-lines-process.test.mjs tests/transcription-restart.test.mjs tests/transcription-cache.test.mjs tests/speaker-identification.test.mjs tests/log-pose-writer.test.mjs tests/log-pose-reader.test.mjs
+        run: node --test --test-concurrency=1 tests/platform-runtime.test.mjs tests/backend-path-guards.test.mjs tests/windows-runtime.test.mjs tests/backup-runtime.test.mjs tests/json-lines-process.test.mjs tests/transcription-restart.test.mjs tests/transcription-cache.test.mjs tests/speaker-identification.test.mjs tests/log-pose-writer.test.mjs tests/log-pose-reader.test.mjs tests/local-readiness.test.mjs tests/python-readiness.test.mjs tests/check-local-readiness.test.mjs
       - name: Vérifier la reprise des validations mémoire
         run: node --test --test-concurrency=1 --test-name-pattern="mémoire après panne|recette API" tests/local-api.test.mjs
       - name: Construire le frontend sous Windows

@@ -54,6 +54,27 @@ Ouvrir ensuite `http://localhost:5173`. Dans un autre terminal :
 npm.cmd run check:local
 ```
 
+## Lire le diagnostic local
+
+`npm.cmd run check:local` ne lit aucun enregistrement et ne lance aucun modèle.
+Le contrôle charge les dépendances Python avec les options hors ligne des
+bibliothèques, sans installer de paquet ni télécharger de poids. Il distingue
+`localPythonEnvironment` (exécutable présent), `pythonDependencies` (imports
+contrôlés), `prerequisitesOk` et `servicesOk`.
+
+Le code de sortie est 0 seulement si `readyForLocalAttempt` est vrai : les
+prérequis de transcription locale et les deux services sont disponibles. Le
+code 1 demande d'examiner les champs faux ou incomplets ; il est attendu si les
+services sont arrêtés. Pyannote reste optionnel pour transcrire sans attribuer
+les voix. Une sonde Python interrompue est signalée par `state: incomplete`,
+avec les seuls imports effectivement vérifiés avant son interruption.
+
+`modelsTested: false` et `microphoneTested: false` décrivent ce contrôle : ils ne
+remplacent pas la recette sur un audio synthétique puis sur le microphone du
+poste. Une tentative de transcription peut encore nécessiter les poids du modèle
+ou l'acceptation de ses conditions. Aucun secret ni diagnostic brut Python n'est
+recopié dans le rapport JSON.
+
 ## Données et secrets
 
 Les données restent hors du dépôt, sous `%USERPROFILE%\VOGUE-MERRY-DONNEES`.

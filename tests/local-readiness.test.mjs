@@ -1,10 +1,24 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isSupportedNode, probeLocalService } from "../scripts/lib/local-readiness.mjs";
+import { isSupportedNode, probeLocalService, localReadinessSummary } from "../scripts/lib/local-readiness.mjs";
 
 test("installation : refuser les versions Node trop anciennes pour les dépendances verrouillées", () => {
   for (const value of ["20.19.0", "22.0.0", "22.11.9", "inconnu", "22.12.0-rc.1"]) assert.equal(isSupportedNode(value), false, value);
   for (const value of ["22.12.0", "22.22.0", "v24.19.0"]) assert.equal(isSupportedNode(value), true, value);
+});
+
+test("diagnostic : services sains et Python présent ne prouvent pas les dépendances", () => {
+  const report = { supportedNode: true, ffmpeg: true, ffprobe: true, localPythonEnvironment: true,
+    api: { healthy: true }, transcription: { healthy: true },
+    pythonDependencies: { state: "checked", pythonAvailable: true, supportedVersion: true, fasterWhisper: false, av: true } };
+  assert.equal(localReadinessSummary(report).readyForLocalAttempt, false);
+  const ready = localReadinessSummary({ ...report, pythonDependencies: { ...report.pythonDependencies, fasterWhisper: true } });
+  assert.equal(ready.readyForLocalAttempt, true);
+  assert.equal(ready.modelsTested, false);
+  assert.equal(ready.microphoneTested, false);
+  assert.equal(localReadinessSummary({ ...report, pythonDependencies: { ...report.pythonDependencies, fasterWhisper: true, state: "incomplete" } }).readyForLocalAttempt, false);
+  assert.equal(localReadinessSummary({ ...report, ffprobe: false }).prerequisitesOk, false);
+  assert.equal(localReadinessSummary({ ...report, api: { healthy: false } }).servicesOk, false);
 });
 
 test("diagnostic : distinguer service sain, indisponible, interdit et mauvais service", async () => {

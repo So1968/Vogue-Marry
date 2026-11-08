@@ -5,12 +5,18 @@ import { spawnSync } from "node:child_process";
 import path from "node:path";
 import os from "node:os";
 import fs from "node:fs";
-test("diagnostic local : renvoie du JSON sans données personnelles ni secrets", () => {
+test("diagnostic local : renvoie du JSON sans données personnelles ni secrets", (t) => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "vogue-readiness-home-fictif-"));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }));
   const run = spawnSync(process.execPath, ["scripts/check-local-readiness.mjs"], {
-    encoding: "utf8", timeout: 15000
+    encoding: "utf8", timeout: 45000, env: { ...process.env, HOME: home, USERPROFILE: home }
   });
-  assert.equal(run.status, 0, run.stderr);
+  assert.ok(run.status === 0 || run.status === 1, run.stderr);
   const report = JSON.parse(run.stdout);
+  assert.equal(run.status, report.readyForLocalAttempt ? 0 : 1);
+  assert.equal(report.modelsTested, false);
+  assert.equal(report.microphoneTested, false);
+  assert.equal(fs.existsSync(path.join(home, "VOGUE-MERRY-DONNEES")), false);
   assert.equal(typeof report.supportedNode, "boolean");
   assert.equal(typeof report.api.reachable, "boolean");
   assert.equal(typeof report.transcription.reachable, "boolean");
@@ -23,10 +29,11 @@ test("diagnostic local : retrouver le venv du dépôt depuis un autre répertoir
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), "vogue-readiness-cwd-"));
   t.after(() => fs.rmSync(cwd, { recursive: true, force: true }));
   const run = spawnSync(process.execPath, [path.resolve("scripts/check-local-readiness.mjs")], {
-    cwd, encoding: "utf8", timeout: 25000
+    cwd, encoding: "utf8", timeout: 45000
   });
-  assert.equal(run.status, 0, run.stderr);
+  assert.ok(run.status === 0 || run.status === 1, run.stderr);
   const report = JSON.parse(run.stdout);
+  assert.equal(run.status, report.readyForLocalAttempt ? 0 : 1);
   assert.equal(report.localPythonEnvironment, fs.existsSync(localPythonPath(process.cwd())));
   assert.equal(typeof report.api.healthy, "boolean");
   assert.equal(typeof report.transcription.healthy, "boolean");

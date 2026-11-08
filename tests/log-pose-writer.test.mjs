@@ -18,7 +18,7 @@ test("écrit et relit les fichiers Log Pose fictifs sans modifier leurs rubrique
   });
   const snapshot = {
     projectName:"Île test", updatedAt:"2026-10-16",
-    priorityActions:[{action:"Préparer le devis",responsable:"Mateo",echeance:"2026-11-20",statut:"À faire"}],
+    priorityActions:[{action:"Préparer le devis fictif",responsable:"Responsable fictif",echeance:"2026-11-20",statut:"À faire"}],
     priorityNeeds:[],
     lastDecision:{decision:"Valider le cap",statut:"Validé"},
     whatToRemember:"Reprendre le dossier",

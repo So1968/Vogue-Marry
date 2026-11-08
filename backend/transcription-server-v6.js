@@ -1248,7 +1248,12 @@ app.use((error, _req, res, next) => {
   return next(error);
 });
 
-app.listen(PORT, "127.0.0.1", () => {
+app.listen(PORT, "127.0.0.1", (error) => {
+  if (error) {
+    console.error(`Démarrage du moteur local impossible sur le port ${PORT} (${error.code || "erreur réseau"}).`);
+    process.exitCode = 1;
+    return;
+  }
   console.log(`Vogue Marry — transcription v6 : http://127.0.0.1:${PORT}`);
   console.log(`Local : ${LOCAL_MODEL} + ${DIARIZATION_MODEL}.`);
   console.log(`Contrôle renforcé : local complet + seconde lecture ${PRIMARY_MODEL}.`);

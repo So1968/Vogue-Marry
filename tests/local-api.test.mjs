@@ -35,34 +35,55 @@ async function waitFor(url, attempts = 40) {
   throw lastError || new Error(`Service indisponible : ${url}`);
 }
 
+async function waitOwnedServer(child, port, output) {
+  for (let attempt = 0; attempt < 150 && !output().includes(`http://127.0.0.1:${port}`); attempt++) {
+    if (child.exitCode !== null || child.signalCode) throw new Error("Le serveur de recette s'est arrêté.");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.ok(output().includes(`http://127.0.0.1:${port}`), "Le processus de recette doit confirmer son propre démarrage.");
+}
+
+async function stopFixtureProcess(child) {
+  if (child.exitCode !== null || child.signalCode) return;
+  await new Promise((resolve) => {
+    const forced = setTimeout(() => child.kill("SIGKILL"), 2000);
+    child.once("exit", () => { clearTimeout(forced); resolve(); });
+    child.kill("SIGTERM");
+  });
+}
+
 async function withServer(script, port, callback, healthPath = port === 8010 ? "health" : "transcription/health") {
   const home = makeHome();
   engineToken = loadInternalToken(path.join(home, ".config", "vogue-merry"));
   const child = spawn(process.execPath, [script], {
     cwd: ROOT,
-    env: { ...process.env, HOME: home },
+    env: { ...process.env, HOME: home, USERPROFILE: home },
     stdio: ["ignore", "pipe", "pipe"]
   });
 
   let stderr = "";
+  let stdout = "";
+  child.stdout.on("data", (chunk) => { stdout += chunk.toString(); });
   child.stderr.on("data", (chunk) => { stderr += chunk.toString(); });
 
   try {
+    // Ne jamais lancer une recette contre un service préexistant sur ce port.
+    await waitOwnedServer(child, port, () => stdout);
     await waitFor(`http://127.0.0.1:${port}/api/${port === 8010 ? healthPath : "transcription/escales"}`);
     await callback(home);
   } catch (error) {
     if (stderr.trim()) error.message += `\nServeur : ${stderr.trim()}`;
     throw error;
   } finally {
-    child.kill("SIGTERM");
-    fs.rmSync(home, { recursive: true, force: true });
+    await stopFixtureProcess(child);
+    fs.rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 }
 
 async function withUnifiedServer(callback) {
   const home = makeHome();
   engineToken = loadInternalToken(path.join(home, ".config", "vogue-merry"));
-  const env = { ...process.env, HOME: home, VOGUE_TRANSCRIPTION_PORT: "8011" };
+  const env = { ...process.env, HOME: home, USERPROFILE: home, VOGUE_TRANSCRIPTION_PORT: "8011" };
   const children = [
     spawn(process.execPath, ["backend/transcription-server-v6.js"], {
       cwd: ROOT,
@@ -77,12 +98,15 @@ async function withUnifiedServer(callback) {
   ];
 
   const stderr = new Map();
+  const stdout = ["", ""];
   children.forEach((child, index) => {
     stderr.set(index, "");
+    child.stdout.on("data", (chunk) => { stdout[index] += chunk.toString(); });
     child.stderr.on("data", (chunk) => stderr.set(index, `${stderr.get(index)}${chunk.toString()}`));
   });
 
   try {
+    await Promise.all(children.map((child, index) => waitOwnedServer(child, index === 0 ? 8011 : 8010, () => stdout[index])));
     await waitFor("http://127.0.0.1:8010/api/transcription/escales");
     await callback(home);
   } catch (error) {
@@ -90,10 +114,27 @@ async function withUnifiedServer(callback) {
     if (details) error.message += `\nServeurs : ${details}`;
     throw error;
   } finally {
-    children.forEach((child) => child.kill("SIGTERM"));
-    fs.rmSync(home, { recursive: true, force: true });
+    await Promise.all(children.map(stopFixtureProcess));
+    fs.rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 }
+
+test("recette API : refuse un service préexistant au lieu d'utiliser ses données", async () => {
+  for (const [script, port] of [["backend/server.js", 8010], ["backend/transcription-server-v6.js", 8011]]) {
+    let calls = 0, callbackRan = false;
+    const foreign = http.createServer((_req, res) => {
+      calls++;
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end('{"status":"ok"}');
+    });
+    await new Promise((resolve, reject) => { foreign.once("error", reject); foreign.listen(port, "127.0.0.1", resolve); });
+    try {
+      await assert.rejects(withServer(script, port, async () => { callbackRan = true; }), /serveur de recette s'est arrêté/u);
+      assert.equal(callbackRan, false);
+      assert.equal(calls, 0, "Même une réponse de santé positive du service étranger ne doit pas autoriser la recette.");
+    } finally { await new Promise((resolve) => foreign.close(resolve)); }
+  }
+});
 
 test("API mémoire : santé locale, CORS local et refus des chemins dangereux", async () => {
   await withServer("backend/server.js", 8010, async () => {
@@ -994,6 +1035,81 @@ test("mémoire projet : escale → résultat synthétique → journal relu → v
     assert.equal((await api(logRoute)).logPose.priorityActions.length, 0);
     assert.equal((await api(logRoute)).logPose.whatToRemember, "Repère humain fictif.");
     assert.equal(fs.readFileSync(path.join(projectDir, "01_escales_reunions", meetingDirName, "audio_original.webm"), "utf8"), "AUDIO_FICTIF_NON_DECODABLE");
+  });
+});
+
+test("mémoire après panne : revalider un journal répare le Log Pose sans modifier le journal", async () => {
+  await withServer("backend/server.js", 8010, async (home) => {
+    const call = async (route, body) => {
+      const response = await fetch("http://127.0.0.1:8010" + route, body ? {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+      } : {});
+      return { status: response.status, body: await response.json() };
+    };
+    const project = await call("/api/projects", { name: "Île fictive reprise journal" });
+    assert.equal(project.status, 201);
+    const projectSlug = project.body.project.slug;
+    const meeting = await call("/api/meetings/export", { projectName: "Île fictive reprise journal", title: "Journal fictif relu", actions: "- Action fictive à confirmer" });
+    const coordinates = { projectSlug, meetingDirName: meeting.body.meetingDirName };
+    const report = await call("/api/meetings/read-report", coordinates);
+    assert.equal((await call("/api/meetings/save-report", { ...coordinates, content: report.body.content + "\nNote humaine fictive conservée.\n" })).status, 200);
+    assert.equal((await call("/api/log-pose/save", { projectSlug, whatToRemember: "Repère manuel fictif" })).status, 200);
+    const projectDir = path.join(home, "VOGUE-MERRY-DONNEES", "01_PROJETS", projectSlug);
+    const logMarkdown = path.join(projectDir, "10_log_pose", "log_pose.md");
+    fs.renameSync(logMarkdown, logMarkdown + ".avant-panne-fictive");
+    fs.mkdirSync(logMarkdown); // Refus d'écriture du document dérivé, pas de données réelles.
+    assert.equal((await call("/api/meetings/validate", coordinates)).status, 400);
+    const validated = path.join(projectDir, "01_escales_reunions", coordinates.meetingDirName, "journal_de_bord_valide.md");
+    const original = fs.readFileSync(validated);
+    assert.match(original.toString(), /Note humaine fictive conservée/u);
+    fs.rmdirSync(logMarkdown);
+    const retry = await call("/api/meetings/validate", coordinates);
+    assert.equal(retry.status, 200);
+    assert.equal(retry.body.status, "already-validated");
+    assert.equal(fs.existsSync(logMarkdown), true, "Une relance doit réparer le document dérivé absent.");
+    assert.deepEqual(fs.readFileSync(validated), original);
+    const log = JSON.parse(fs.readFileSync(path.join(projectDir, "10_log_pose", "log_pose.json"), "utf8"));
+    assert.equal(log.manual.whatToRemember, "Repère manuel fictif");
+    assert.equal(log.pendingReview.actions, 1);
+    assert.equal((await call("/api/meetings/save-report", { ...coordinates, content: "Ne pas remplacer un journal validé" })).status, 400);
+    assert.deepEqual(fs.readFileSync(validated), original);
+  });
+});
+
+test("mémoire après panne : revalider une action répare les dérivés sans doublon ni perte humaine", async () => {
+  await withServer("backend/server.js", 8010, async (home) => {
+    const call = async (route, body) => {
+      const response = await fetch("http://127.0.0.1:8010" + route, body ? {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body)
+      } : {});
+      return { status: response.status, body: await response.json() };
+    };
+    const project = await call("/api/projects", { name: "Île fictive reprise action" });
+    const projectSlug = project.body.project.slug;
+    const meeting = await call("/api/meetings/export", { projectName: "Île fictive reprise action", title: "Escale fictive", actions: "- Action préexistante fictive\n- Action initiale fictive", decisions: "- Décision fictive locale" });
+    assert.equal((await call("/api/meetings/validate", { projectSlug, meetingDirName: meeting.body.meetingDirName })).status, 201);
+    const proposals = await call(`/api/knowledge/action?projectSlug=${projectSlug}`);
+    assert.equal(proposals.body.items.length, 2);
+    assert.equal((await call("/api/knowledge/action/validate", { projectSlug, itemId: proposals.body.items[0].id, item: { statut: "Terminé" } })).status, 201);
+    const itemId = proposals.body.items[1].id;
+    const projectDir = path.join(home, "VOGUE-MERRY-DONNEES", "01_PROJETS", projectSlug);
+    const actionDir = path.join(projectDir, "03_manoeuvres_actions");
+    const markdown = path.join(actionDir, "manoeuvres_actions.md");
+    fs.renameSync(markdown, markdown + ".avant-panne-fictive");
+    fs.mkdirSync(markdown);
+    assert.equal((await call("/api/knowledge/action/validate", { projectSlug, itemId, item: { action: "Action corrigée par une personne fictive", statut: "En cours" } })).status, 400);
+    const canonical = path.join(actionDir, "manoeuvres_actions.json");
+    const accepted = fs.readFileSync(canonical);
+    assert.equal(JSON.parse(accepted).length, 2);
+    fs.rmdirSync(markdown);
+    assert.equal((await call("/api/knowledge/action/validate", { projectSlug, itemId, item: { action: "NE PAS REMPLACER LA CORRECTION" } })).status, 200);
+    assert.equal(fs.existsSync(markdown), true, "Une relance doit recréer le Markdown après publication JSON partielle.");
+    assert.match(fs.readFileSync(markdown, "utf8"), /Action corrigée par une personne fictive/u);
+    assert.deepEqual(fs.readFileSync(canonical), accepted, "La relance ne réécrit pas la validation humaine existante.");
+    const log = JSON.parse(fs.readFileSync(path.join(projectDir, "10_log_pose", "log_pose.json"), "utf8"));
+    assert.equal(log.priorityActions[0].id, itemId);
+    assert.equal(log.priorityActions[0].action, "Action corrigée par une personne fictive");
+    assert.equal((await call(`/api/knowledge/action?projectSlug=${projectSlug}`)).body.items.length, 2);
   });
 });
 

@@ -22,3 +22,39 @@ masquer une action en cours d'une autre île. Les tests inversent l'ordre de deu
 Cette recette API complète les tests unitaires ; la recette visuelle, les vrais
 modèles de transcription et les interruptions matérielles restent à vérifier
 sur le poste cible avant de déclarer la version 1.0 reçue.
+
+## Reprise après publication partielle d'une validation
+
+Une validation peut être enregistrée alors que l'écriture d'un document dérivé
+échoue. Deux recettes API provoquent ce refus uniquement dans des dossiers fictifs :
+
+- Journal validé publié puis Log Pose Markdown indisponible : répéter la validation
+  doit régénérer le Log Pose, conserver les notes manuelles et laisser les octets
+  du journal validé inchangés. Le journal reste protégé contre les corrections.
+- Action acceptée dans le JSON puis Markdown indisponible : répéter la validation
+  doit régénérer le Markdown et le Log Pose, sans ajouter d'entrée ni réécrire le
+  JSON déjà accepté. Une charge utile différente lors de la relance ne remplace
+  pas la première correction humaine. Une action préexistante reste conservée.
+
+Ces relances doivent encore signaler une erreur si les documents dérivés restent
+inaccessibles ; elles ne renvoient un succès qu'après leur réparation. Le même
+chemin de reprise s'applique aux décisions et besoins déjà validés.
+
+Les fichiers du journal validé, des listes JSON/Markdown et du Log Pose sont
+publiés par écriture temporaire puis renommage. Cela protège chaque fichier
+contre une publication tronquée ; ce n'est pas une transaction globale entre
+plusieurs fichiers, ni une garantie contre une panne physique. La relance reste
+nécessaire si une interruption survient entre les publications. Les sauvegardes
+restent indispensables.
+
+La CI Windows exécute aussi ces deux scénarios et les lecteurs/rédacteurs Log Pose.
+Les processus de recette doivent confirmer leur propre écoute avant tout appel
+API, utiliser HOME et USERPROFILE fictifs, puis être arrêtés avant le nettoyage.
+Aucun service personnel déjà présent sur un port n'est utilisé par ces recettes.
+
+Un test réserve aussi les ports 8010 puis 8011 avec un serveur fictif répondant
+positivement à la santé. Les deux processus Vogue Marry doivent refuser ce conflit
+avec un code de sortie en échec, sans imprimer leur confirmation d'écoute. Sous
+Express 5, le callback d'écoute peut recevoir l'erreur : il faut la traiter avant
+le message de démarrage. La recette vérifie qu'aucune requête n'est envoyée au
+service déjà présent, même si celui-ci aurait répondu positivement à la santé.

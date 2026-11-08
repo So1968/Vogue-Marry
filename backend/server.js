@@ -14,6 +14,7 @@ import { normalizeLogPoseManual } from "./lib/log-pose-normalization.js";
 import { makeLogPoseReader } from "./lib/log-pose-reader.js";
 import { makeLogPoseWriter } from "./lib/log-pose-writer.js";
 import { makeLogPoseSynthesis } from "./lib/log-pose-synthesis.js";
+import { atomicWriteText } from "./lib/transcription-history.js";
 import { normalizeKnowledgeText, extractMarkdownSection, parseKnowledgeSection, pickKnowledgeValue } from "./lib/knowledge-markdown.js";
 
 // Les nouveaux fichiers de données, temporaires et secrets sont privés par défaut.
@@ -553,8 +554,14 @@ function writeKnowledgeEntries(projectSlug, kind, entries) {
   const config = KNOWLEDGE_CONFIG[kind];
   const directory = safePathInside(PROJECTS_ROOT, projectSlug, config.folder);
   ensureDir(directory);
-  fs.writeFileSync(memoryPath(directory, config.fileName), JSON.stringify(entries, null, 2), "utf8");
+  atomicWriteText(memoryPath(directory, config.fileName), JSON.stringify(entries, null, 2));
+  writeKnowledgeMarkdown(projectSlug, kind, entries);
+}
 
+function writeKnowledgeMarkdown(projectSlug, kind, entries) {
+  const config = KNOWLEDGE_CONFIG[kind];
+  const directory = safePathInside(PROJECTS_ROOT, projectSlug, config.folder);
+  ensureDir(directory);
   const projectName = entries[0]?.projectName || projectSlug.replaceAll("_", " ");
   const lines = kind === "action"
     ? [
@@ -579,7 +586,7 @@ function writeKnowledgeEntries(projectSlug, kind, entries) {
         "|---|---|---|---|---|---|",
         ...entries.map((entry) => `| ${knowledgeMarkdownValue(entry.need)} | ${knowledgeMarkdownValue(entry.context)} | ${knowledgeMarkdownValue(entry.priority)} | ${knowledgeMarkdownValue(entry.statut)} | ${knowledgeMarkdownValue(entry.source)} | ${knowledgeMarkdownValue(entry.projectName)} |`)
       ];
-  fs.writeFileSync(memoryPath(directory, config.markdownName), `${lines.join("\n")}\n`, "utf8");
+  atomicWriteText(memoryPath(directory, config.markdownName), `${lines.join("\n")}\n`);
 }
 
 function knowledgeItemsForProject(projectSlug, kind) {
@@ -1312,6 +1319,7 @@ app.post("/api/meetings/validate", (req, res) => {
     const { exportedPath, validatedPath } = findReportPaths(meetingDir);
 
     if (fs.existsSync(validatedPath)) {
+      syncLogPose(safeProjectSlug);
       return res.status(200).json({ status: "already-validated", validatedFileName: path.basename(validatedPath) });
     }
 
@@ -1319,7 +1327,7 @@ app.post("/api/meetings/validate", (req, res) => {
 
     const content = fs.readFileSync(exportedPath, "utf8");
     createFileVersion(validatedPath, "avant_validation");
-    fs.writeFileSync(validatedPath, content + "\n\n---\n\nValidé dans Vogue Merry le " + new Date().toISOString() + "\n", "utf8");
+    atomicWriteText(validatedPath, content + "\n\n---\n\nValidé dans Vogue Merry le " + new Date().toISOString() + "\n");
     syncLogPose(safeProjectSlug);
 
     res.status(201).json({ status: "ok", validatedFileName: path.basename(validatedPath) });
@@ -1460,7 +1468,11 @@ app.post("/api/knowledge/:kind/validate", (req, res) => {
 
     const accepted = readKnowledgeEntries(projectSlug, kind);
     const alreadyAccepted = accepted.find((item) => item.id === itemId);
-    if (alreadyAccepted) return res.status(200).json({ status: "ok", item: { ...alreadyAccepted, reviewStatus: "validé" } });
+    if (alreadyAccepted) {
+      writeKnowledgeMarkdown(projectSlug, kind, accepted);
+      syncLogPose(projectSlug);
+      return res.status(200).json({ status: "ok", item: { ...alreadyAccepted, reviewStatus: "validé" } });
+    }
 
     const candidate = readValidatedKnowledgeProposals(projectSlug, kind).find((item) => item.id === itemId);
     if (!candidate) throw new Error("Élément non trouvé dans un journal de bord validé.");
@@ -1627,7 +1639,12 @@ app.use((error, _req, res, next) => {
   return next(error);
 });
 
-app.listen(PORT, "127.0.0.1", () => {
+app.listen(PORT, "127.0.0.1", (error) => {
+  if (error) {
+    console.error(`Démarrage de l'API locale impossible sur le port ${PORT} (${error.code || "erreur réseau"}).`);
+    process.exitCode = 1;
+    return;
+  }
   console.log(`Vogue Merry API unifiée lancée : http://127.0.0.1:${PORT} (V6 interne : ${TRANSCRIPTION_HOST}:${TRANSCRIPTION_PORT})`);
   console.log(`Dossier données : ${DATA_ROOT}`);
 });

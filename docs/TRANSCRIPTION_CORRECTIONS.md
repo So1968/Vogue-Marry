@@ -43,3 +43,27 @@ les corrections successives, les appels répétés et un échec de sauvegarde de
 l'historique, sur des données synthétiques. Ils ne valident pas la qualité des
 modèles Faster-Whisper et Pyannote sur des réunions réelles. Aucun envoi cloud
 n'est nécessaire pour ces vérifications.
+
+## Fin explicite des moteurs locaux
+
+Le dialogue JSONL avec Faster-Whisper et Pyannote exige désormais un événement
+`done` unique, dont `segments` correspond au nombre d'événements de segments
+reçus. Un code de sortie zéro sans cette fin ne suffit plus à publier un succès.
+Un flux silencieux terminé explicitement avec zéro segment reste valide.
+
+Un JSON invalide ou tronqué, un événement après la fin, un décompte incohérent,
+une erreur annoncée par le moteur ou une erreur du traitement des événements
+interrompt la tâche. Les exceptions de persistance/progression ne sont plus
+ignorées par le parseur. Le sous-processus fautif est arrêté ; le flux UTF-8 est
+décodé en continu, y compris quand un caractère est réparti entre plusieurs
+lectures. Une ligne est bornée à 1 Mio et les diagnostics stderr sont bornés.
+
+Une erreur de transcription locale suit le parcours d'échec existant et garde
+l'audio original. Une erreur de diarisation suit le repli existant avec
+avertissement et intervenants non identifiés, sans inventer de noms. Les
+corrections humaines, leurs versions et la copie originale restent inchangées.
+
+Les tests lancent de vrais sous-processus Node avec des événements fictifs :
+ils contrôlent le contrat de transport, pas la justesse acoustique de Whisper,
+la séparation réelle des voix par Pyannote ou la qualité du microphone Windows.
+Aucun modèle cloud n'est appelé par cette validation.

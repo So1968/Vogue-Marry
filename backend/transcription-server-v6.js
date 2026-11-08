@@ -1,3 +1,4 @@
+import { runJsonLines as runEngineJsonLines } from "./lib/json-lines-process.js";
 import { createDataPath } from "./lib/path-guards.js";
 import { localPythonPath, pythonProcessEnv } from "./lib/runtime-paths.js";
 import { protectWindowsPrivatePath } from "./lib/windows-private-path.js";
@@ -182,40 +183,9 @@ function run(command, args, options = {}) {
   });
 }
 
+
 function runJsonLines(command, args, onEvent) {
-  return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd: PROJECT_ROOT, env: pythonProcessEnv(), stdio: ["ignore", "pipe", "pipe"] });
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    let buffer = "";
-    let stderr = "";
-    let eventError = "";
-
-    function handleLine(line) {
-      if (!line.trim()) return;
-      try {
-        const event = JSON.parse(line);
-        if (event.type === "error") eventError = event.message || "Erreur du moteur local.";
-        onEvent(event);
-      } catch {
-        // Le moteur n'écrit normalement que du JSON sur stdout.
-      }
-    }
-
-    child.stdout.on("data", (data) => {
-      buffer += data.toString();
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-      lines.forEach(handleLine);
-    });
-    child.stderr.on("data", (data) => { stderr += data.toString(); });
-    child.on("error", reject);
-    child.on("close", (code) => {
-      if (buffer.trim()) handleLine(buffer);
-      if (code === 0 && !eventError) resolve({ stderr });
-      else reject(new Error(eventError || stderr.trim().slice(-1800) || `${command} s'est arrêté avec le code ${code}.`));
-    });
-  });
+  return runEngineJsonLines(command, args, onEvent, { cwd: PROJECT_ROOT, env: pythonProcessEnv() });
 }
 
 async function mediaDuration(filePath) {

@@ -9,6 +9,7 @@ import { createHash } from "node:crypto";
 import { setTimeout as delay } from "node:timers/promises";
 import { loadInternalToken, INTERNAL_TOKEN_HEADER } from "../backend/lib/local-access.js";
 import { runtimeJobStatus } from "../backend/lib/transcription-job-state.js";
+import { transcriptionCacheKey } from "../backend/lib/transcription-cache.js";
 
 test("tâches : une exécution réellement active conserve sa progression", () => {
   const active = new Set(["tache_fictive"]);
@@ -29,7 +30,7 @@ test("tâches : un résultat terminé ou une erreur existante ne sont pas reclas
   assert.equal(runtimeJobStatus("absente", null, new Set()), null);
 });
 
-test("transcription : redémarrage, relance des tâches interrompues et cache corrigé conservé", { timeout: 60000 }, async (t) => {
+test("transcription : redémarrage, relance des tâches interrompues et cache corrigé conservé", { timeout: 90000 }, async (t) => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), "vogue-restart-fictif-"));
   const root = path.join(home, "VOGUE-MERRY-DONNEES", "99_TRANSCRIPTION_TESTS");
   const token = loadInternalToken(path.join(home, ".config", "vogue-merry"));
@@ -42,9 +43,10 @@ test("transcription : redémarrage, relance des tâches interrompues et cache co
   const request = (suffix, options = {}) => globalThis.fetch(base + suffix, {
     ...options, headers: { ...options.headers, [INTERNAL_TOKEN_HEADER]: token }, signal: AbortSignal.timeout(5000)
   });
-  async function start() {
+  async function start(model = "modele-fictif-A") {
     child = spawn(process.execPath, ["backend/transcription-server-v6.js"], {
-      env: { ...process.env, HOME: home, USERPROFILE: home, VOGUE_TRANSCRIPTION_PORT: String(port) },
+      env: { ...process.env, HOME: home, USERPROFILE: home, VOGUE_TRANSCRIPTION_PORT: String(port),
+        VOGUE_WHISPER_MODEL: model, HF_TOKEN: "", OPENAI_API_KEY: "" },
       stdio: ["ignore", "ignore", "ignore"]
     });
     for (let attempt = 0; attempt < 150; attempt++) {
@@ -64,7 +66,11 @@ test("transcription : redémarrage, relance des tâches interrompues et cache co
   const audio = Buffer.from("AUDIO_FICTIF_INTERROMPU_SANS_DONNEES_PERSONNELLES");
   function signature(bytes) {
     const audioHash = createHash("sha256").update(bytes).digest("hex");
-    return createHash("sha256").update(JSON.stringify({ audioHash, mode: "local", participants: [], context: "", meetingId: "" })).digest("hex");
+    return transcriptionCacheKey({ audioHash, mode: "local", participants: [], context: "", meetingId: "", configuration: {
+      localModel: "modele-fictif-A", device: process.env.VOGUE_WHISPER_DEVICE ?? "cpu",
+      computeType: process.env.VOGUE_WHISPER_COMPUTE ?? "int8", diarizationModel: "pyannote/speaker-diarization-community-1",
+      diarizationRequested: false, verificationModel: null
+    } });
   }
   function seed(jobId, state, bytes, result) {
     const dir = path.join(root, jobId);
@@ -111,6 +117,25 @@ test("transcription : redémarrage, relance des tâches interrompues et cache co
   assert.equal(cached.status, 200);
   assert.equal(cached.body.status, "cached");
   assert.equal(cached.body.jobId, "tache_fictive_corrigee");
+  assert.deepEqual(fs.readFileSync(path.join(completed, "transcription.json")), correctedBytes);
+  assert.deepEqual(fs.readFileSync(path.join(completed, "audio_original.webm")), completedAudio);
+  const legacyAudio = Buffer.from("ANCIEN_AUDIO_FICTIF_SANS_CONFIGURATION");
+  const legacyResult = { ...correction, jobId: "ancienne_tache_corrigee" };
+  const legacy = seed(legacyResult.jobId, "done", legacyAudio, legacyResult);
+  const legacyStatus = JSON.parse(fs.readFileSync(path.join(legacy, "status.json"), "utf8"));
+  legacyStatus.cacheKey = createHash("sha256").update(JSON.stringify({
+    audioHash: createHash("sha256").update(legacyAudio).digest("hex"), mode: "local", participants: [], context: "", meetingId: ""
+  })).digest("hex");
+  fs.writeFileSync(path.join(legacy, "status.json"), JSON.stringify(legacyStatus));
+  assert.equal((await submit(legacyAudio)).status, 202, "Une ancienne clé sans identité moteur ne prouve pas sa compatibilité.");
+  assert.deepEqual(await (await request("/ancienne_tache_corrigee/result")).json(), legacyResult,
+    "L'ancien résultat corrigé reste consultable après création d'une nouvelle tentative.");
+  assert.deepEqual(fs.readFileSync(path.join(legacy, "audio_original.webm")), legacyAudio);
+  await stop();
+  await start("modele-fictif-B");
+  const changedModel = await submit(completedAudio);
+  assert.equal(changedModel.status, 202, "Un changement de modèle ne doit pas renvoyer un ancien résultat.");
+  assert.notEqual(changedModel.body.jobId, "tache_fictive_corrigee");
   assert.deepEqual(fs.readFileSync(path.join(completed, "transcription.json")), correctedBytes);
   assert.deepEqual(fs.readFileSync(path.join(completed, "audio_original.webm")), completedAudio);
 });

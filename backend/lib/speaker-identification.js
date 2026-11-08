@@ -7,8 +7,10 @@ export function introductionScore(text, participant) {
   const normalized = normalizeIdentity(text);
   const name = normalizeIdentity(participant);
   if (!normalized || !name) return 0;
-  // Le nom doit suivre l'auto-présentation, pas apparaître ailleurs dans le tour.
-  const selfCue = new RegExp(`(?:^| )(?:(?:je suis)|(?:je m appelle)|(?:moi c est)|(?:mon nom est)|(?:je me presente)|(?:je me nomme)) ${name}(?: |$)`, "u");
+  // Une citation ou une proposition rapportée ne prouve pas l'identité de la voix.
+  if (/[«»“”"]/u.test(String(text)) || /(?:^|[,;:])\s*['‘]/u.test(String(text))) return 0;
+  const greeting = "(?:(?:bonjour|bonsoir|salut)(?: (?:a tous|a toutes|tout le monde|a toutes et a tous))? )?";
+  const selfCue = new RegExp(`^${greeting}(?:(?:je suis)|(?:je m appelle)|(?:moi c est)|(?:mon nom est)|(?:je me presente)|(?:je me nomme)) ${name}(?: |$)`, "u");
   return selfCue.test(normalized) ? 10 : 0;
 }
 

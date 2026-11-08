@@ -39,3 +39,19 @@ test("voix : contexte des participants sans identité forcée ni voix supplémen
   assert.deepEqual(mapped.map, { SPEAKER_00: { name: names[0], confidence: "presentation-explicite" } });
   assert.equal(mapped.detectedSpeakerCount, 3);
 });
+
+test("voix : une présentation citée, rapportée ou conditionnelle reste inconnue", () => {
+  for (const text of [
+    `Elle a dit : je suis ${names[0]}.`,
+    `Pour cet exemple, dites je m'appelle ${names[0]}.`,
+    `Si je suis ${names[0]}, alors je peux signer.`,
+    `« Je suis ${names[0]} », voilà ce qui est écrit.`,
+    `Bonjour, « je suis ${names[0]} », c'est une citation.`,
+    `'Je suis ${names[0]}', voilà le texte.`,
+    `Bonjour, 'je suis ${names[0]}', c'est une citation.`
+  ]) {
+    assert.equal(introductionScore(text, names[0]), 0, text);
+    assert.deepEqual(mapSpeakersFromIntroductions([turn("SPEAKER_00", text)], names).map, {});
+  }
+  assert.equal(introductionScore(`Bonjour à tous, je m'appelle ${names[0]}.`, names[0]), 10);
+});

@@ -1,5 +1,6 @@
 import { runJsonLines as runEngineJsonLines } from "./lib/json-lines-process.js";
 import { runtimeJobStatus } from "./lib/transcription-job-state.js";
+import { transcriptionConfiguration, transcriptionCacheKey, reusableTranscriptionResult } from "./lib/transcription-cache.js";
 import { createDataPath } from "./lib/path-guards.js";
 import { localPythonPath, pythonProcessEnv } from "./lib/runtime-paths.js";
 import { protectWindowsPrivatePath } from "./lib/windows-private-path.js";
@@ -633,7 +634,7 @@ function buildVerificationMarkdown(meta, verification) {
   return `${lines.join("\n").trim()}\n`;
 }
 
-async function processJob(jobId, sourcePath, originalName, mode, context, participants, meeting) {
+async function processJob(jobId, sourcePath, originalName, mode, context, participants, meeting, configuration) {
   const warnings = [];
   try {
     if (!localEngineReady()) throw new Error("Le moteur local n'est pas installé. Lance npm run transcription:setup.");
@@ -683,6 +684,7 @@ async function processJob(jobId, sourcePath, originalName, mode, context, partic
       mode,
       engine: "vogue-marry-transcription-v6",
       localModel: LOCAL_MODEL,
+      configuration,
       diarizationModel: diarization.length ? DIARIZATION_MODEL : null,
       verificationModel: mode === "high" ? PRIMARY_MODEL : null,
       meeting,
@@ -747,13 +749,18 @@ async function processJob(jobId, sourcePath, originalName, mode, context, partic
   }
 }
 
-function cacheSignature(audioHash, mode, participants, context, meetingId) {
-  return createHash("sha256")
-    .update(JSON.stringify({ audioHash, mode, participants, context: String(context || "").trim(), meetingId: meetingId || "" }))
-    .digest("hex");
+function engineConfiguration(mode) {
+  return transcriptionConfiguration(mode, {
+    localModel: LOCAL_MODEL,
+    device: process.env.VOGUE_WHISPER_DEVICE ?? "cpu",
+    computeType: process.env.VOGUE_WHISPER_COMPUTE ?? "int8",
+    diarizationModel: DIARIZATION_MODEL,
+    diarizationRequested: Boolean(hfToken()),
+    verificationModel: PRIMARY_MODEL
+  });
 }
 
-function findReusableJob(cacheKey) {
+function findReusableJob(cacheKey, configuration) {
   if (!fs.existsSync(ROOT)) return null;
   const reusableStates = new Set(["queued", "transcribing", "diarizing", "verifying", "done"]);
   const entries = fs.readdirSync(ROOT, { withFileTypes: true })
@@ -762,7 +769,11 @@ function findReusableJob(cacheKey) {
   for (const entry of entries) {
     const status = runtimeJobStatus(entry.name, readJsonIfExists(statusPath(entry.name)), activeJobs);
     if (!status || !reusableStates.has(status.state) || status.cacheKey !== cacheKey) continue;
-    if (status.state === "done" && !fs.existsSync(memoryPath(jobDir(entry.name), "transcription.json"))) continue;
+    if (status.state === "done") {
+      const result = readJsonIfExists(memoryPath(jobDir(entry.name), "transcription.json"));
+      // Un échec Pyannote ne doit pas rester caché après sa remise en service.
+      if (!reusableTranscriptionResult(entry.name, result, configuration)) continue;
+    }
     return { jobId: entry.name, state: status.state };
   }
   return null;
@@ -1139,8 +1150,9 @@ app.post("/api/transcription", upload.single("audio"), async (req, res) => {
     }
     const context = String(req.body?.context || meeting?.context || "").trim();
     const audioHash = await fileSha256(req.file.path);
-    const cacheKey = cacheSignature(audioHash, mode, participants, context, meetingId);
-    const reusableJob = findReusableJob(cacheKey);
+    const configuration = engineConfiguration(mode);
+    const cacheKey = transcriptionCacheKey({ audioHash, mode, participants, context, meetingId, configuration });
+    const reusableJob = findReusableJob(cacheKey, configuration);
     if (reusableJob) {
       fs.unlinkSync(req.file.path);
       return res.status(200).json({
@@ -1174,12 +1186,13 @@ app.post("/api/transcription", upload.single("audio"), async (req, res) => {
       participants,
       participantCount: participants.length,
       audioHash,
-      cacheKey
+      cacheKey,
+      configuration
     });
 
     activeJobs.add(jobId);
     setImmediate(() => {
-      processJob(jobId, sourcePath, req.file.originalname, mode, context, participants, meeting).then(
+      processJob(jobId, sourcePath, req.file.originalname, mode, context, participants, meeting, configuration).then(
         () => activeJobs.delete(jobId),
         () => {
           activeJobs.delete(jobId);

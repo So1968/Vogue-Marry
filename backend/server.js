@@ -1639,7 +1639,12 @@ app.use((error, _req, res, next) => {
   return next(error);
 });
 
-app.listen(PORT, "127.0.0.1", () => {
+app.listen(PORT, "127.0.0.1", (error) => {
+  if (error) {
+    console.error(`Démarrage de l'API locale impossible sur le port ${PORT} (${error.code || "erreur réseau"}).`);
+    process.exitCode = 1;
+    return;
+  }
   console.log(`Vogue Merry API unifiée lancée : http://127.0.0.1:${PORT} (V6 interne : ${TRANSCRIPTION_HOST}:${TRANSCRIPTION_PORT})`);
   console.log(`Dossier données : ${DATA_ROOT}`);
 });

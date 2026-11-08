@@ -35,6 +35,23 @@ async function waitFor(url, attempts = 40) {
   throw lastError || new Error(`Service indisponible : ${url}`);
 }
 
+async function waitOwnedServer(child, port, output) {
+  for (let attempt = 0; attempt < 150 && !output().includes(`http://127.0.0.1:${port}`); attempt++) {
+    if (child.exitCode !== null || child.signalCode) throw new Error("Le serveur de recette s'est arrêté.");
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.ok(output().includes(`http://127.0.0.1:${port}`), "Le processus de recette doit confirmer son propre démarrage.");
+}
+
+async function stopFixtureProcess(child) {
+  if (child.exitCode !== null || child.signalCode) return;
+  await new Promise((resolve) => {
+    const forced = setTimeout(() => child.kill("SIGKILL"), 2000);
+    child.once("exit", () => { clearTimeout(forced); resolve(); });
+    child.kill("SIGTERM");
+  });
+}
+
 async function withServer(script, port, callback, healthPath = port === 8010 ? "health" : "transcription/health") {
   const home = makeHome();
   engineToken = loadInternalToken(path.join(home, ".config", "vogue-merry"));
@@ -51,24 +68,14 @@ async function withServer(script, port, callback, healthPath = port === 8010 ? "
 
   try {
     // Ne jamais lancer une recette contre un service préexistant sur ce port.
-    for (let attempt = 0; attempt < 150 && !stdout.includes(`http://127.0.0.1:${port}`); attempt++) {
-      if (child.exitCode !== null || child.signalCode) throw new Error("Le serveur de recette s'est arrêté.");
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    assert.ok(stdout.includes(`http://127.0.0.1:${port}`), "Le processus de recette doit confirmer son propre démarrage.");
+    await waitOwnedServer(child, port, () => stdout);
     await waitFor(`http://127.0.0.1:${port}/api/${port === 8010 ? healthPath : "transcription/escales"}`);
     await callback(home);
   } catch (error) {
     if (stderr.trim()) error.message += `\nServeur : ${stderr.trim()}`;
     throw error;
   } finally {
-    if (child.exitCode === null && !child.signalCode) {
-      await new Promise((resolve) => {
-        const forced = setTimeout(() => child.kill("SIGKILL"), 2000);
-        child.once("exit", () => { clearTimeout(forced); resolve(); });
-        child.kill("SIGTERM");
-      });
-    }
+    await stopFixtureProcess(child);
     fs.rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 }
@@ -76,7 +83,7 @@ async function withServer(script, port, callback, healthPath = port === 8010 ? "
 async function withUnifiedServer(callback) {
   const home = makeHome();
   engineToken = loadInternalToken(path.join(home, ".config", "vogue-merry"));
-  const env = { ...process.env, HOME: home, VOGUE_TRANSCRIPTION_PORT: "8011" };
+  const env = { ...process.env, HOME: home, USERPROFILE: home, VOGUE_TRANSCRIPTION_PORT: "8011" };
   const children = [
     spawn(process.execPath, ["backend/transcription-server-v6.js"], {
       cwd: ROOT,
@@ -91,12 +98,15 @@ async function withUnifiedServer(callback) {
   ];
 
   const stderr = new Map();
+  const stdout = ["", ""];
   children.forEach((child, index) => {
     stderr.set(index, "");
+    child.stdout.on("data", (chunk) => { stdout[index] += chunk.toString(); });
     child.stderr.on("data", (chunk) => stderr.set(index, `${stderr.get(index)}${chunk.toString()}`));
   });
 
   try {
+    await Promise.all(children.map((child, index) => waitOwnedServer(child, index === 0 ? 8011 : 8010, () => stdout[index])));
     await waitFor("http://127.0.0.1:8010/api/transcription/escales");
     await callback(home);
   } catch (error) {
@@ -104,10 +114,27 @@ async function withUnifiedServer(callback) {
     if (details) error.message += `\nServeurs : ${details}`;
     throw error;
   } finally {
-    children.forEach((child) => child.kill("SIGTERM"));
-    fs.rmSync(home, { recursive: true, force: true });
+    await Promise.all(children.map(stopFixtureProcess));
+    fs.rmSync(home, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
 }
+
+test("recette API : refuse un service préexistant au lieu d'utiliser ses données", async () => {
+  for (const [script, port] of [["backend/server.js", 8010], ["backend/transcription-server-v6.js", 8011]]) {
+    let calls = 0, callbackRan = false;
+    const foreign = http.createServer((_req, res) => {
+      calls++;
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end('{"status":"ok"}');
+    });
+    await new Promise((resolve, reject) => { foreign.once("error", reject); foreign.listen(port, "127.0.0.1", resolve); });
+    try {
+      await assert.rejects(withServer(script, port, async () => { callbackRan = true; }), /serveur de recette s'est arrêté/u);
+      assert.equal(callbackRan, false);
+      assert.equal(calls, 0, "Même une réponse de santé positive du service étranger ne doit pas autoriser la recette.");
+    } finally { await new Promise((resolve) => foreign.close(resolve)); }
+  }
+});
 
 test("API mémoire : santé locale, CORS local et refus des chemins dangereux", async () => {
   await withServer("backend/server.js", 8010, async () => {

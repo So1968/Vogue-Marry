@@ -51,3 +51,10 @@ La CI Windows exécute aussi ces deux scénarios et les lecteurs/rédacteurs Log
 Les processus de recette doivent confirmer leur propre écoute avant tout appel
 API, utiliser HOME et USERPROFILE fictifs, puis être arrêtés avant le nettoyage.
 Aucun service personnel déjà présent sur un port n'est utilisé par ces recettes.
+
+Un test réserve aussi les ports 8010 puis 8011 avec un serveur fictif répondant
+positivement à la santé. Les deux processus Vogue Marry doivent refuser ce conflit
+avec un code de sortie en échec, sans imprimer leur confirmation d'écoute. Sous
+Express 5, le callback d'écoute peut recevoir l'erreur : il faut la traiter avant
+le message de démarrage. La recette vérifie qu'aucune requête n'est envoyée au
+service déjà présent, même si celui-ci aurait répondu positivement à la santé.

@@ -53,7 +53,12 @@ test("diagnostic Python : un vrai venv vide ne vaut pas moteur installé", { tim
   assert.equal(fs.existsSync(python), true);
   const report = probePythonDependencies(python);
   assert.equal(report.pythonAvailable, true);
-  assert.equal(report.supportedVersion, true);
+  const versionProbe = spawnSync(python, ["-c", "import sys; print('.'.join(map(str,sys.version_info[:2])))"], { encoding: "utf8", timeout: 5000, windowsHide: true });
+  assert.equal(versionProbe.status, 0, versionProbe.stderr);
+  const version = versionProbe.stdout.trim();
+  assert.equal(report.version, version);
+  assert.equal(report.supportedVersion, ["3.10", "3.11", "3.12", "3.13"].includes(version));
+  t.diagnostic(`Python de recette : ${version} ; version compatible : ${report.supportedVersion}`);
   assert.equal(report.state, "checked");
   assert.equal(report.fasterWhisper, false);
   assert.equal(report.av, false);

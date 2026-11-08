@@ -21,9 +21,10 @@ test("santé runtime : venv vide refusé, sonde partagée et API réactive penda
     const created = spawnSync(process.platform === "win32" ? "python" : "python3", ["-m", "venv", "--without-pip", path.join(root, ".venv-transcription")], { encoding: "utf8", timeout: 15000 });
     assert.equal(created.status, 0, created.stderr);
     const python = localPythonPath(root);
-    const site = spawnSync(python, ["-c", "import sysconfig; print(sysconfig.get_paths()['purelib'])"], { encoding: "utf8", timeout: 5000 });
-    assert.equal(site.status, 0, site.stderr);
-    fs.writeFileSync(path.join(site.stdout.trim(), "sitecustomize.py"),
+    assert.equal(fs.existsSync(python), true);
+    const fixtureModules = path.join(root, "modules-python-fictifs");
+    fs.mkdirSync(fixtureModules);
+    fs.writeFileSync(path.join(fixtureModules, "sitecustomize.py"),
       'import os,time\nwith open(os.environ["VOGUE_TEST_PROBE_MARKER"],"a") as handle: handle.write("sonde fictive\\n")\ntime.sleep(2)\n');
     const marker = path.join(root, "sondes-fictives.txt");
     const token = loadInternalToken(path.join(root, ".config", "vogue-merry"));
@@ -33,6 +34,7 @@ test("santé runtime : venv vide refusé, sonde partagée et API réactive penda
     await new Promise((resolve) => reservation.close(resolve));
     child = spawn(process.execPath, [path.join(root, "backend/transcription-server-v6.js")], {
       env: { ...process.env, HOME: root, USERPROFILE: root, HF_TOKEN: "", OPENAI_API_KEY: "",
+        PYTHONPATH: fixtureModules, PYTHONHOME: "",
         VOGUE_TRANSCRIPTION_PORT: String(port), VOGUE_TEST_PROBE_MARKER: marker }, stdio: ["ignore", "pipe", "ignore"]
     });
     let output = "";

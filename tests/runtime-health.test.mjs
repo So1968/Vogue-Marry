@@ -33,15 +33,19 @@ test("santé runtime : venv vide refusé, sonde partagée et API réactive penda
     await new Promise((resolve) => reservation.close(resolve));
     child = spawn(process.execPath, [path.join(root, "backend/transcription-server-v6.js")], {
       env: { ...process.env, HOME: root, USERPROFILE: root, HF_TOKEN: "", OPENAI_API_KEY: "",
-        VOGUE_TRANSCRIPTION_PORT: String(port), VOGUE_TEST_PROBE_MARKER: marker }, stdio: ["ignore", "ignore", "ignore"]
+        VOGUE_TRANSCRIPTION_PORT: String(port), VOGUE_TEST_PROBE_MARKER: marker }, stdio: ["ignore", "pipe", "ignore"]
     });
+    let output = "";
+    child.stdout.on("data", (data) => { output += String(data); });
     const request = (route, timeout = 10000) => fetch(`http://127.0.0.1:${port}/api/transcription/${route}`, {
       headers: { [INTERNAL_TOKEN_HEADER]: token }, signal: AbortSignal.timeout(timeout)
     });
     let ready = false;
     for (let attempt = 0; attempt < 150; attempt++) {
       if (child.exitCode !== null || child.signalCode) throw new Error("Moteur de recette arrêté.");
-      try { if ((await request("escales", 500)).ok) { ready = true; break; } } catch { /* démarrage */ }
+      if (output.includes(`http://127.0.0.1:${port}`)) {
+        try { if ((await request("escales", 500)).ok) { ready = true; break; } } catch { /* démarrage */ }
+      }
       await delay(100);
     }
     assert.ok(ready);

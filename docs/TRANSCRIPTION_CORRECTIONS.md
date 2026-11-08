@@ -94,3 +94,40 @@ backend, puis son redémarrage. Elle vérifie les quatre anciens états, la cré
 d'une nouvelle tâche, l'intégrité de l'ancien audio et du statut historique, ainsi
 que le maintien en cache d'une transcription corrigée. Elle ne lance pas Whisper
 ou Pyannote et ne valide pas leur précision acoustique.
+
+## Cache lié à la configuration du moteur
+
+La clé de cache versionnée comprend désormais le modèle Whisper, le périphérique,
+le type de calcul, le modèle de diarisation et sa demande d'activation, ainsi que
+le modèle de seconde lecture en mode renforcé. Elle conserve les critères audio,
+mode, participants, contexte et escale. La configuration demandée est enregistrée
+avec la tâche et le résultat ; aucune clé API ni valeur de jeton n'entre dans
+ces métadonnées. Le modèle réellement utilisé pour la diarisation reste indiqué
+séparément dans le résultat.
+
+Un changement de modèle ou de paramètres ne doit plus renvoyer silencieusement
+un résultat précédent. Une ancienne clé sans configuration n'est pas supposée
+compatible : une nouvelle soumission explicite crée une nouvelle tâche. Les
+anciens audios, résultats et corrections restent consultables ; ils ne sont pas
+convertis ou effacés. Les confirmations de voix d'une ancienne inférence ne sont
+pas automatiquement transposées à une nouvelle répartition des voix.
+
+Un résultat illisible, sans liste de segments ou associé à une autre tâche n'est
+pas réutilisé. Si la diarisation est demandée et a échoué, une nouvelle demande
+peut la retenter. Une confirmation humaine existante garde toutefois sa priorité
+et permet de conserver le cache corrigé pour la même configuration.
+
+## Présentations rapportées et intervenants inconnus
+
+Une attribution automatique nécessite une présentation au début du tour, avec
+une salutation simple éventuellement placée devant. Les guillemets détectés et
+les cas rapportés ou conditionnels couverts par les tests restent non identifiés :
+« elle a dit : je suis… » ne démontre pas l'identité de la voix qui rapporte les
+propos. Le texte reste intégralement conservé et la confirmation humaine reste
+possible. Cette heuristique prudente peut laisser inconnue une présentation
+réelle plus complexe ; elle ne constitue pas une reconnaissance biométrique ni
+une compréhension exhaustive du discours rapporté.
+
+Les recettes utilisent des noms, modèles et audios fictifs. Elles vérifient le
+changement de modèle par redémarrage du vrai backend et la conservation des
+anciens résultats, sans inférence acoustique réelle ni appel cloud.

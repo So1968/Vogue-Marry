@@ -60,6 +60,13 @@ export function probePythonDependenciesAsync(python) {
   });
 }
 
+export function probeExecutable(command, args = ["-version"]) {
+  return new Promise((resolve) => {
+    execFile(command, args, { timeout: 5000, killSignal: "SIGKILL", maxBuffer: 128 * 1024, windowsHide: true },
+      (error) => resolve(!error));
+  });
+}
+
 export function createCachedPythonProbe(python, { probe = probePythonDependenciesAsync, now = Date.now, ttlMs = 30000 } = {}) {
   let cached, expiresAt = 0, pending;
   return () => {

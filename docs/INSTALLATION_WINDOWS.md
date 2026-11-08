@@ -152,3 +152,10 @@ doit refuser l'état prêt, partager la sonde et continuer à répondre aux autr
 requêtes pendant le contrôle. Une recette Firefox couvre le libellé, l'explication
 sur les modèles/microphone et le blocage du lancement en l'absence des prérequis,
 avec des réponses de santé et un fichier exclusivement fictifs.
+
+Le statut runtime vérifie également la disponibilité de FFmpeg et ffprobe, en
+parallèle des imports et avec le même cache. Leur absence bloque un nouveau
+lancement. Pendant un contrôle, l'interface retire l'ancien état positif et
+indique « Vérification en cours ». Une réponse HTTP en erreur ou une identité de
+service invalide n'est jamais acceptée comme une installation prête, même si son
+corps contient un indicateur positif.

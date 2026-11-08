@@ -6,7 +6,7 @@ import os from "node:os";
 import { spawnSync } from "node:child_process";
 import { probePythonDependencies } from "../scripts/lib/python-readiness.mjs";
 import { localPythonPath } from "../backend/lib/runtime-paths.js";
-import { createCachedPythonProbe, probePythonDependenciesAsync } from "../backend/lib/python-readiness.js";
+import { createCachedPythonProbe, probePythonDependenciesAsync, probeExecutable } from "../backend/lib/python-readiness.js";
 
 const marker = "__VOGUE_DEPENDENCY__";
 const line = (value) => marker + JSON.stringify(value) + "\n";
@@ -96,4 +96,10 @@ test("santé Python : une erreur de sonde ne divulgue rien et reste retentable",
   assert.ok(!JSON.stringify(report).includes("NE_PAS_AFFICHER"));
   timestamp = 10;
   assert.notEqual(await probe(), report);
+});
+
+test("santé runtime : commandes disponibles, absentes ou en échec distinguées", async () => {
+  assert.equal(await probeExecutable(process.execPath, ["--version"]), true);
+  assert.equal(await probeExecutable("vogue-binaire-fictif-absent"), false);
+  assert.equal(await probeExecutable(process.execPath, ["--option-fictive-invalide"]), false);
 });

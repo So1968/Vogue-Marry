@@ -1,6 +1,6 @@
 import { runJsonLines as runEngineJsonLines } from "./lib/json-lines-process.js";
 import { runtimeJobStatus } from "./lib/transcription-job-state.js";
-import { createCachedPythonProbe } from "./lib/python-readiness.js";
+import { createCachedPythonProbe, probePythonDependenciesAsync, probeExecutable } from "./lib/python-readiness.js";
 import { transcriptionConfiguration, transcriptionCacheKey, reusableTranscriptionResult } from "./lib/transcription-cache.js";
 import { createDataPath } from "./lib/path-guards.js";
 import { localPythonPath, pythonProcessEnv } from "./lib/runtime-paths.js";
@@ -31,7 +31,12 @@ const ROOT = memoryPath(DATA_ROOT, "99_TRANSCRIPTION_TESTS");
 const PROJECTS_ROOT = memoryPath(DATA_ROOT, "01_PROJETS");
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const LOCAL_PYTHON = localPythonPath(PROJECT_ROOT);
-const probeLocalDependencies = createCachedPythonProbe(LOCAL_PYTHON);
+const probeLocalDependencies = createCachedPythonProbe(LOCAL_PYTHON, { probe: async (python) => {
+  const [dependencies, ffmpeg, ffprobe] = await Promise.all([
+    probePythonDependenciesAsync(python), probeExecutable("ffmpeg"), probeExecutable("ffprobe")
+  ]);
+  return { ...dependencies, mediaTools: { ffmpeg, ffprobe } };
+} });
 const LOCAL_SCRIPT = path.join(PROJECT_ROOT, "backend", "local_transcribe.py");
 const DIARIZE_SCRIPT = path.join(PROJECT_ROOT, "backend", "local_diarize.py");
 const LOCAL_MODEL = process.env.VOGUE_WHISPER_MODEL || "large-v3-turbo";
@@ -162,7 +167,7 @@ function hfToken() {
 
 function localEngineReady(dependencies) {
   return fs.existsSync(LOCAL_SCRIPT) && dependencies.state === "checked" && dependencies.supportedVersion &&
-    dependencies.fasterWhisper && dependencies.av;
+    dependencies.fasterWhisper && dependencies.av && dependencies.mediaTools?.ffmpeg === true && dependencies.mediaTools?.ffprobe === true;
 }
 
 function pyannoteInstalled(dependencies) {
@@ -1057,7 +1062,8 @@ app.get("/api/transcription/health", async (req, res) => {
     service: "vogue-marry-transcription",
     version: 6,
     localEngineReady: localReady,
-    pythonDependencies: dependencies,
+    pythonDependencies: Object.fromEntries(Object.entries(dependencies).filter(([key]) => key !== "mediaTools")),
+    mediaTools: dependencies.mediaTools || { ffmpeg: false, ffprobe: false },
     modelsTested: false,
     microphoneTested: false,
     modelAccessVerified: false,

@@ -100,7 +100,9 @@ try {
   // Le vert représente les prérequis, pas une validation des modèles ou du micro.
   const healthPage = await context.newPage();
   let prerequisitesAvailable = true;
+  let healthStatus = 200;
   await healthPage.route("**/api/transcription/health", (route) => route.fulfill({
+    status: healthStatus,
     json: { status: "ok", service: "vogue-marry-transcription", localEngineReady: prerequisitesAvailable,
       localModel: "modele-fictif", highPrecisionReady: false, pyannoteInstalled: false, modelsTested: false, microphoneTested: false }
   }));
@@ -119,7 +121,14 @@ try {
   await healthPage.locator('input[type="file"]').setInputFiles(dummyAudio);
   await healthPage.getByText(dummyAudio.name, { exact: true }).waitFor();
   assert.equal(await healthPage.getByRole("button", { name: "Transcrire gratuitement" }).isDisabled(), true);
-  console.log("RESULTAT_SANTE_INTERFACE_FIREFOX", JSON.stringify({ prerequisitesLabel: true, modelsNotClaimedTested: true, missingDependenciesDisableStart: true }));
+  healthStatus = 503;
+  prerequisitesAvailable = true; // Un corps positif ne rend pas saine une réponse HTTP en erreur.
+  await healthPage.reload();
+  await healthPage.getByText("Le moteur local est indisponible ou son état n’a pas pu être vérifié.", { exact: false }).waitFor();
+  await healthPage.locator('input[type="file"]').setInputFiles(dummyAudio);
+  await healthPage.getByText(dummyAudio.name, { exact: true }).waitFor();
+  assert.equal(await healthPage.getByRole("button", { name: "Transcrire gratuitement" }).isDisabled(), true);
+  console.log("RESULTAT_SANTE_INTERFACE_FIREFOX", JSON.stringify({ prerequisitesLabel: true, modelsNotClaimedTested: true, missingDependenciesDisableStart: true, unhealthyHttpDisablesStart: true }));
   await healthPage.close();
   const page = await context.newPage();
   await page.goto("http://127.0.0.1:5173/");

@@ -70,6 +70,7 @@ function readSpeakerOverrides(jobId) {
 
 export default function TranscriptionView() {
   const [health, setHealth] = useState(null);
+  const [healthChecking, setHealthChecking] = useState(true);
   const [escales, setEscales] = useState([]);
   const [meetingId, setMeetingId] = useState("");
   const [manualParticipants, setManualParticipants] = useState("");
@@ -98,14 +99,23 @@ export default function TranscriptionView() {
   );
 
   async function refreshHealth() {
+    setHealthChecking(true);
+    setHealth(null);
     try {
-      const response = await fetch(`${API}/api/transcription/health`);
+      const response = await fetch(`${API}/api/transcription/health`, { signal: AbortSignal.timeout(20000) });
       const payload = await response.json();
+      if (!response.ok || payload?.status !== "ok" || payload?.service !== "vogue-marry-transcription" ||
+          typeof payload.localEngineReady !== "boolean" || typeof payload.highPrecisionReady !== "boolean") {
+        throw new Error("État de santé non vérifié.");
+      }
       setHealth(payload);
       return payload;
     } catch {
-      setError("Le moteur de transcription Vogue Marry n’est pas démarré.");
+      setHealth(null);
+      setError("Le moteur local est indisponible ou son état n’a pas pu être vérifié. Vérifie son démarrage puis recharge la page.");
       return null;
+    } finally {
+      setHealthChecking(false);
     }
   }
 
@@ -232,7 +242,7 @@ export default function TranscriptionView() {
     return () => window.clearInterval(timer);
   }, [job?.jobId, job?.state]);
 
-  const engineReady = mode === "high" ? health?.highPrecisionReady : health?.localEngineReady;
+  const engineReady = !healthChecking && (mode === "high" ? health?.highPrecisionReady : health?.localEngineReady);
   const canStart = Boolean(file && engineReady && !busy && (mode !== "high" || cloudConsent));
   const estimatedCost = mode === "high" && audioDuration ? estimateSensitiveCost(audioDuration) : 0;
   const completedCost = result?.mode === "high" ? Number(result?.verification?.estimatedCostUsd || 0) : 0;
@@ -450,7 +460,7 @@ export default function TranscriptionView() {
         <div className="transcription-statusline">
           <strong>{mode === "high" ? "Contrôle renforcé" : "Moteur local renforcé"}</strong>
           <span className={engineReady ? "ready" : "not-ready"}>
-            {engineReady ? `Prérequis disponibles · ${health?.localModel || "large-v3-turbo"}` : "Configuration à vérifier"}
+            {healthChecking ? "Vérification en cours…" : engineReady ? `Prérequis disponibles · ${health?.localModel || "large-v3-turbo"}` : "Configuration à vérifier"}
           </span>
         </div>
 

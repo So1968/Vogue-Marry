@@ -1,5 +1,6 @@
 import { runJsonLines as runEngineJsonLines } from "./lib/json-lines-process.js";
 import { runtimeJobStatus } from "./lib/transcription-job-state.js";
+import { createCachedPythonProbe, probePythonDependenciesAsync, probeExecutable } from "./lib/python-readiness.js";
 import { transcriptionConfiguration, transcriptionCacheKey, reusableTranscriptionResult } from "./lib/transcription-cache.js";
 import { createDataPath } from "./lib/path-guards.js";
 import { localPythonPath, pythonProcessEnv } from "./lib/runtime-paths.js";
@@ -14,7 +15,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { createHash, randomUUID } from "crypto";
-import { spawn, spawnSync } from "child_process";
+import { spawn } from "child_process";
 import { fileURLToPath } from "url";
 
 // Les nouveaux fichiers de données, temporaires et secrets sont privés par défaut.
@@ -30,6 +31,12 @@ const ROOT = memoryPath(DATA_ROOT, "99_TRANSCRIPTION_TESTS");
 const PROJECTS_ROOT = memoryPath(DATA_ROOT, "01_PROJETS");
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const LOCAL_PYTHON = localPythonPath(PROJECT_ROOT);
+const probeLocalDependencies = createCachedPythonProbe(LOCAL_PYTHON, { probe: async (python) => {
+  const [dependencies, ffmpeg, ffprobe] = await Promise.all([
+    probePythonDependenciesAsync(python), probeExecutable("ffmpeg"), probeExecutable("ffprobe")
+  ]);
+  return { ...dependencies, mediaTools: { ffmpeg, ffprobe } };
+} });
 const LOCAL_SCRIPT = path.join(PROJECT_ROOT, "backend", "local_transcribe.py");
 const DIARIZE_SCRIPT = path.join(PROJECT_ROOT, "backend", "local_diarize.py");
 const LOCAL_MODEL = process.env.VOGUE_WHISPER_MODEL || "large-v3-turbo";
@@ -158,17 +165,13 @@ function hfToken() {
   return fs.readFileSync(HF_TOKEN_FILE, "utf8").trim();
 }
 
-function localEngineReady() {
-  return fs.existsSync(LOCAL_PYTHON) && fs.existsSync(LOCAL_SCRIPT);
+function localEngineReady(dependencies) {
+  return fs.existsSync(LOCAL_SCRIPT) && dependencies.state === "checked" && dependencies.supportedVersion &&
+    dependencies.fasterWhisper && dependencies.av && dependencies.mediaTools?.ffmpeg === true && dependencies.mediaTools?.ffprobe === true;
 }
 
-function pyannoteInstalled() {
-  if (!fs.existsSync(LOCAL_PYTHON) || !fs.existsSync(DIARIZE_SCRIPT)) return false;
-  try {
-    return spawnSync(LOCAL_PYTHON, ["-c", "import pyannote.audio"], { stdio: "ignore", timeout: 15000 }).status === 0;
-  } catch {
-    return false;
-  }
+function pyannoteInstalled(dependencies) {
+  return fs.existsSync(DIARIZE_SCRIPT) && dependencies.state === "checked" && dependencies.supportedVersion && dependencies.pyannote;
 }
 
 function run(command, args, options = {}) {
@@ -386,7 +389,7 @@ async function transcribeLocal(jobId, sourcePath, progressStart = 5, progressEnd
 }
 
 async function diarizeLocal(jobId, sourcePath, expectedParticipantCount, progressStart = 55, progressEnd = 82) {
-  if (!pyannoteInstalled()) throw new Error("Pyannote n'est pas installé. Lance npm run transcription:setup puis redémarre le moteur.");
+  if (!pyannoteInstalled(await probeLocalDependencies())) throw new Error("Les dépendances Pyannote ne sont pas disponibles. Lance npm run transcription:setup puis redémarre le moteur.");
   if (!hfToken()) throw new Error("Jeton Hugging Face absent pour Pyannote Community-1.");
 
   const diarization = [];
@@ -637,7 +640,8 @@ function buildVerificationMarkdown(meta, verification) {
 async function processJob(jobId, sourcePath, originalName, mode, context, participants, meeting, configuration) {
   const warnings = [];
   try {
-    if (!localEngineReady()) throw new Error("Le moteur local n'est pas installé. Lance npm run transcription:setup.");
+    const dependencies = await probeLocalDependencies();
+    if (!localEngineReady(dependencies)) throw new Error("Les prérequis du moteur local ne sont pas disponibles. Lance npm run transcription:setup puis vérifie le diagnostic local.");
     const duration = await mediaDuration(sourcePath);
     if (!duration) throw new Error("Impossible de déterminer la durée de l'enregistrement.");
 
@@ -645,7 +649,7 @@ async function processJob(jobId, sourcePath, originalName, mode, context, partic
     writeJson(memoryPath(jobDir(jobId), "transcription_locale_brute.json"), local);
 
     let diarization = [];
-    if (pyannoteInstalled() && hfToken()) {
+    if (pyannoteInstalled(dependencies) && hfToken()) {
       try {
         diarization = await diarizeLocal(jobId, sourcePath, participants.length, mode === "high" ? 50 : 62, mode === "high" ? 72 : 92);
         writeJson(memoryPath(jobDir(jobId), "diarisation_locale.json"), diarization);
@@ -1049,14 +1053,20 @@ app.post("/api/transcription/:jobId/speakers", (req, res) => {
   }
 });
 
-app.get("/api/transcription/health", (req, res) => {
-  const localReady = localEngineReady();
-  const pyannoteReady = pyannoteInstalled();
+app.get("/api/transcription/health", async (req, res) => {
+  const dependencies = await probeLocalDependencies();
+  const localReady = localEngineReady(dependencies);
+  const pyannoteReady = pyannoteInstalled(dependencies);
   res.json({
     status: "ok",
     service: "vogue-marry-transcription",
     version: 6,
     localEngineReady: localReady,
+    pythonDependencies: Object.fromEntries(Object.entries(dependencies).filter(([key]) => key !== "mediaTools")),
+    mediaTools: dependencies.mediaTools || { ffmpeg: false, ffprobe: false },
+    modelsTested: false,
+    microphoneTested: false,
+    modelAccessVerified: false,
     localModel: LOCAL_MODEL,
     pyannoteInstalled: pyannoteReady,
     huggingFaceConfigured: Boolean(hfToken()),

@@ -89,13 +89,50 @@ try {
   const projects = await (await fetch("http://127.0.0.1:8010/api/projects")).json();
   const slug = projects.projects[0].slug;
 
-  browser = await firefox.launch({
+  const launchBrowser = () => firefox.launch({
     headless: true,
     firefoxUserPrefs: {
       "media.navigator.streams.fake": true,
       "media.navigator.permission.disabled": true
     }
   });
+  browser = await launchBrowser();
+  const healthContext = await browser.newContext();
+  // Le vert représente les prérequis, pas une validation des modèles ou du micro.
+  const healthPage = await healthContext.newPage();
+  let prerequisitesAvailable = true;
+  let healthStatus = 200;
+  await healthPage.route("**/api/transcription/health", (route) => route.fulfill({
+    status: healthStatus,
+    json: { status: "ok", service: "vogue-marry-transcription", localEngineReady: prerequisitesAvailable,
+      localModel: "modele-fictif", highPrecisionReady: false, pyannoteInstalled: false, modelsTested: false, microphoneTested: false }
+  }));
+  await healthPage.route("**/api/transcription/escales", (route) => route.fulfill({ json: { escales: [] } }));
+  await healthPage.goto("http://127.0.0.1:5173/transcription");
+  await healthPage.getByText("Prérequis disponibles · modele-fictif", { exact: true }).waitFor();
+  await healthPage.getByText("Ce contrôle vérifie l’installation, sans tester les modèles ni le microphone.", { exact: false }).waitFor();
+  const dummyAudio = { name: "audio-fictif.webm", mimeType: "audio/webm", buffer: Buffer.from("AUDIO_FICTIF_NON_DECODABLE") };
+  await healthPage.locator('input[type="file"]').setInputFiles(dummyAudio);
+  await healthPage.getByText(dummyAudio.name, { exact: true }).waitFor();
+  assert.equal(await healthPage.getByRole("button", { name: "Transcrire gratuitement" }).isEnabled(), true);
+  prerequisitesAvailable = false;
+  await healthPage.reload({ waitUntil: "domcontentloaded" });
+  await healthPage.getByText("Configuration à vérifier", { exact: true }).waitFor();
+  await healthPage.getByText("Les dépendances locales sont absentes, incompatibles ou ne se chargent pas.", { exact: false }).waitFor();
+  await healthPage.locator('input[type="file"]').setInputFiles(dummyAudio);
+  await healthPage.getByText(dummyAudio.name, { exact: true }).waitFor();
+  assert.equal(await healthPage.getByRole("button", { name: "Transcrire gratuitement" }).isDisabled(), true);
+  healthStatus = 503;
+  prerequisitesAvailable = true; // Un corps positif ne rend pas saine une réponse HTTP en erreur.
+  await healthPage.reload({ waitUntil: "domcontentloaded" });
+  await healthPage.getByText("Le moteur local est indisponible ou son état n’a pas pu être vérifié.", { exact: false }).waitFor();
+  await healthPage.locator('input[type="file"]').setInputFiles(dummyAudio);
+  await healthPage.getByText(dummyAudio.name, { exact: true }).waitFor();
+  assert.equal(await healthPage.getByRole("button", { name: "Transcrire gratuitement" }).isDisabled(), true);
+  console.log("RESULTAT_SANTE_INTERFACE_FIREFOX", JSON.stringify({ prerequisitesLabel: true, modelsNotClaimedTested: true, missingDependenciesDisableStart: true, unhealthyHttpDisablesStart: true }));
+  await healthContext.close();
+  await browser.close();
+  browser = await launchBrowser();
   const context = await browser.newContext();
   const page = await context.newPage();
   await page.goto("http://127.0.0.1:5173/");
@@ -124,7 +161,7 @@ try {
 
   // Après la sauvegarde, le journal affiche l'original et ses repères navigables.
   // Le lecteur est fourni par l'API locale, non par un fichier de Git.
-  await page.reload();
+  await page.reload({ waitUntil: "domcontentloaded" });
   await page.locator(".side-nav button").filter({ hasText: "Escales" }).click();
   await page.locator(".meeting-card").filter({ hasText: title }).waitFor({ timeout: 12000 });
   // Réseau coupé sur le premier envoi progressif : IndexedDB doit permettre
@@ -148,7 +185,7 @@ try {
 
   // Refus du miroir localStorage : le compteur et les fragments IndexedDB
   // doivent suffire pour finaliser un enregistrement dans un vrai Firefox.
-  await page.reload();
+  await page.reload({ waitUntil: "domcontentloaded" });
   await page.locator(".side-nav button").filter({ hasText: "Escales" }).click();
   await page.evaluate(() => {
     const originalSetItem = Storage.prototype.setItem;
@@ -216,7 +253,7 @@ try {
   assert.ok(blockedTransfers >= 4, "La coupure doit réellement refuser audio et marqueurs.");
   const longMeetingDir = path.join(meetingsRoot, queued.session.meetingDirName);
   assert.equal(fs.readdirSync(longMeetingDir).some((name) => name.startsWith("audio_original.")), false);
-  await longPage.reload();
+  await longPage.reload({ waitUntil: "domcontentloaded" });
   await longPage.locator(".side-nav button").filter({ hasText: "Escales" }).click();
   await longPage.getByRole("button", { name: "Reprendre la sauvegarde audio" }).waitFor();
   const reloaded = await snapshotAudio(longPage);
@@ -245,7 +282,7 @@ try {
   assert.equal(longDecode.status, 0, longDecode.stderr);
   assert.equal(longDecode.stderr.trim(), "", "Le décodage ne doit signaler aucune erreur.");
   assert.equal(await snapshotAudio(longPage), null, "Le nettoyage local attend la finalisation confirmée.");
-  await longPage.reload();
+  await longPage.reload({ waitUntil: "domcontentloaded" });
   await longPage.locator(".side-nav button").filter({ hasText: "Escales" }).click();
   assert.equal(await snapshotAudio(longPage), null, "Une session finalisée ne doit pas réapparaître au rechargement.");
   console.log("RESULTAT_COUPURE_PROLONGEE_FIREFOX", JSON.stringify({
@@ -289,7 +326,7 @@ try {
   assert.equal(afterQuota.session.finalizedCapture, false);
   const quotaMeetingDir = path.join(meetingsRoot, afterQuota.session.meetingDirName);
   assert.equal(fs.readdirSync(quotaMeetingDir).some((name) => name.startsWith("audio_original.")), false);
-  await quotaPage.reload();
+  await quotaPage.reload({ waitUntil: "domcontentloaded" });
   await quotaPage.locator(".side-nav button").filter({ hasText: "Escales" }).click();
   await quotaPage.getByRole("button", { name: "Exporter les fragments audio (secours)" }).waitFor();
   const reloadedQuota = await snapshotAudio(quotaPage);

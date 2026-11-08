@@ -1,4 +1,5 @@
 import { runJsonLines as runEngineJsonLines } from "./lib/json-lines-process.js";
+import { runtimeJobStatus } from "./lib/transcription-job-state.js";
 import { createDataPath } from "./lib/path-guards.js";
 import { localPythonPath, pythonProcessEnv } from "./lib/runtime-paths.js";
 import { protectWindowsPrivatePath } from "./lib/windows-private-path.js";
@@ -42,6 +43,7 @@ const OPENAI_URL = "https://api.openai.com/v1/audio/transcriptions";
 const GPT_COST_PER_MINUTE_USD = 0.0045;
 const ALLOWED_ORIGINS = LOCAL_ORIGINS;
 const internalToken = loadInternalToken(path.join(HOME, ".config", "vogue-merry"));
+const activeJobs = new Set();
 
 const DEFAULT_CONTEXT = [
   "Réunion professionnelle en français.",
@@ -758,7 +760,7 @@ function findReusableJob(cacheKey) {
     .filter((entry) => entry.isDirectory() && !entry.name.startsWith("_"))
     .sort((a, b) => b.name.localeCompare(a.name));
   for (const entry of entries) {
-    const status = readJsonIfExists(statusPath(entry.name));
+    const status = runtimeJobStatus(entry.name, readJsonIfExists(statusPath(entry.name)), activeJobs);
     if (!status || !reusableStates.has(status.state) || status.cacheKey !== cacheKey) continue;
     if (status.state === "done" && !fs.existsSync(memoryPath(jobDir(entry.name), "transcription.json"))) continue;
     return { jobId: entry.name, state: status.state };
@@ -1175,7 +1177,18 @@ app.post("/api/transcription", upload.single("audio"), async (req, res) => {
       cacheKey
     });
 
-    setImmediate(() => processJob(jobId, sourcePath, req.file.originalname, mode, context, participants, meeting));
+    activeJobs.add(jobId);
+    setImmediate(() => {
+      processJob(jobId, sourcePath, req.file.originalname, mode, context, participants, meeting).then(
+        () => activeJobs.delete(jobId),
+        () => {
+          activeJobs.delete(jobId);
+          // L'enregistrement de l'échec peut lui-même échouer (stockage refusé).
+          // La lecture runtime signalera alors l'interruption sans faux succès.
+          console.error("État de transcription non enregistré ; audio original conservé.");
+        }
+      );
+    });
     return res.status(202).json({ status: "accepted", jobId, mode, participantCount: participants.length });
   } catch (error) {
     if (req.file?.path && fs.existsSync(req.file.path)) fs.unlinkSync(req.file.path);
@@ -1188,7 +1201,7 @@ app.get("/api/transcription/:jobId", (req, res) => {
   if (!dir) return res.status(400).json({ error: "Identifiant de transcription invalide." });
   const filePath = memoryPath(dir, "status.json");
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: "Transcription inconnue." });
-  return res.json(readJson(filePath));
+  return res.json(runtimeJobStatus(req.params.jobId, readJson(filePath), activeJobs));
 });
 
 app.get("/api/transcription/:jobId/result", (req, res) => {

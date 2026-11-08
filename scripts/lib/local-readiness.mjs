@@ -10,7 +10,7 @@ export function localReadinessSummary(report) {
   const prerequisitesOk = Boolean(report.supportedNode && report.ffmpeg && report.ffprobe &&
     python?.state === "checked" && python.pythonAvailable && python.supportedVersion && python.fasterWhisper && python.av);
   const servicesOk = report.api?.healthy === true && report.transcription?.healthy === true;
-  return { prerequisitesOk, servicesOk, readyForLocalAttempt: prerequisitesOk && servicesOk,
+  return { prerequisitesOk, servicesOk, readyForLocalAttempt: prerequisitesOk && servicesOk && report.transcription?.prerequisitesReady === true,
     modelsTested: false, microphoneTested: false };
 }
 
@@ -20,10 +20,13 @@ export async function probeLocalService(url, expectedService, fetchImpl = fetch)
   try {
     const response = await fetchImpl(url, { signal: AbortSignal.timeout(20_000) });
     const result = await response.json().catch(() => null);
+    const healthy = response.ok && result?.status === "ok" && result?.service === expectedService;
     return {
       reachable: true,
       status: response.status,
-      healthy: response.ok && result?.status === "ok" && result?.service === expectedService
+      healthy,
+      ...(expectedService === "vogue-marry-transcription" ? { prerequisitesReady: healthy && result?.localEngineReady === true } : {})
     };
-  } catch { return { reachable: false, healthy: false }; }
+  } catch { return { reachable: false, healthy: false,
+    ...(expectedService === "vogue-marry-transcription" ? { prerequisitesReady: false } : {}) }; }
 }

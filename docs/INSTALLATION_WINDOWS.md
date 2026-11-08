@@ -131,3 +131,24 @@ sources et nettoie uniquement ses données fictives. Elle ne valide ni votre
 support de sauvegarde réel, ni une récupération après panne physique. Voir
 [la procédure de sauvegarde](SAUVEGARDES_SECURITE.md) avant d'utiliser les données
 réelles. Les archives déchiffrées sont des données en clair à protéger.
+
+## État de santé dans l'interface
+
+Le statut « Prérequis disponibles » repose sur les imports Python vérifiés et une
+version compatible, pas sur la seule présence du venv. L'API utilise la même sonde
+que le diagnostic CLI, en mode asynchrone. Les demandes simultanées partagent un
+contrôle et son résultat est conservé 30 secondes ; une installation corrigée
+peut être redétectée après ce délai ou après redémarrage du moteur.
+
+La sonde ne charge aucun modèle. Les indicateurs `modelsTested`,
+`microphoneTested` et `modelAccessVerified` restent faux pour ce contrôle de
+santé. Le jeton configuré ne prouve pas l'acceptation des conditions d'un modèle
+ni son accès effectif. L'interface invite à une recette sur audio de test avant
+une réunion importante. La CLI respecte aussi le statut des prérequis fourni
+par le moteur : une réponse HTTP saine seule ne suffit pas.
+
+Une recette API utilise un vrai venv vide et un import fictif ralenti : le moteur
+doit refuser l'état prêt, partager la sonde et continuer à répondre aux autres
+requêtes pendant le contrôle. Une recette Firefox couvre le libellé, l'explication
+sur les modèles/microphone et le blocage du lancement en l'absence des prérequis,
+avec des réponses de santé et un fichier exclusivement fictifs.

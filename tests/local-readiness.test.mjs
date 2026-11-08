@@ -9,16 +9,28 @@ test("installation : refuser les versions Node trop anciennes pour les dépendan
 
 test("diagnostic : services sains et Python présent ne prouvent pas les dépendances", () => {
   const report = { supportedNode: true, ffmpeg: true, ffprobe: true, localPythonEnvironment: true,
-    api: { healthy: true }, transcription: { healthy: true },
+    api: { healthy: true }, transcription: { healthy: true, prerequisitesReady: true },
     pythonDependencies: { state: "checked", pythonAvailable: true, supportedVersion: true, fasterWhisper: false, av: true } };
   assert.equal(localReadinessSummary(report).readyForLocalAttempt, false);
   const ready = localReadinessSummary({ ...report, pythonDependencies: { ...report.pythonDependencies, fasterWhisper: true } });
   assert.equal(ready.readyForLocalAttempt, true);
   assert.equal(ready.modelsTested, false);
   assert.equal(ready.microphoneTested, false);
+  assert.equal(localReadinessSummary({ ...report, pythonDependencies: { ...report.pythonDependencies, fasterWhisper: true },
+    transcription: { healthy: true, prerequisitesReady: false } }).readyForLocalAttempt, false);
   assert.equal(localReadinessSummary({ ...report, pythonDependencies: { ...report.pythonDependencies, fasterWhisper: true, state: "incomplete" } }).readyForLocalAttempt, false);
   assert.equal(localReadinessSummary({ ...report, ffprobe: false }).prerequisitesOk, false);
   assert.equal(localReadinessSummary({ ...report, api: { healthy: false } }).servicesOk, false);
+});
+
+test("diagnostic : respecter les prérequis runtime sans recopier sa réponse", async () => {
+  for (const localEngineReady of [true, false]) {
+    const report = await probeLocalService("http://127.0.0.1:8010/api/transcription/health", "vogue-marry-transcription",
+      async () => new Response(JSON.stringify({ status: "ok", service: "vogue-marry-transcription", localEngineReady, secret: "NE_PAS_AFFICHER" })));
+    assert.equal(report.healthy, true);
+    assert.equal(report.prerequisitesReady, localEngineReady);
+    assert.ok(!JSON.stringify(report).includes("NE_PAS_AFFICHER"));
+  }
 });
 
 test("diagnostic : distinguer service sain, indisponible, interdit et mauvais service", async () => {

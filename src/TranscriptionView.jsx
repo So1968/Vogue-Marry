@@ -450,20 +450,26 @@ export default function TranscriptionView() {
         <div className="transcription-statusline">
           <strong>{mode === "high" ? "Contrôle renforcé" : "Moteur local renforcé"}</strong>
           <span className={engineReady ? "ready" : "not-ready"}>
-            {engineReady ? `Prêt · ${health?.localModel || "large-v3-turbo"}` : "Configuration nécessaire"}
+            {engineReady ? `Prérequis disponibles · ${health?.localModel || "large-v3-turbo"}` : "Configuration à vérifier"}
           </span>
         </div>
 
+        {engineReady ? (
+          <div className="transcription-callout">
+            Ce contrôle vérifie l’installation, sans tester les modèles ni le microphone. Valide leur fonctionnement sur un audio de test avant une réunion importante.
+          </div>
+        ) : null}
+
         {!health?.localEngineReady && health ? (
           <div className="transcription-callout">
-            Lance une seule fois <code>npm run transcription:setup</code>, puis redémarre le moteur de transcription.
+            Les dépendances locales sont absentes, incompatibles ou ne se chargent pas. Lance <code>npm run transcription:setup</code>, puis redémarre le moteur de transcription.
           </div>
         ) : null}
 
         {health?.localEngineReady && !health?.pyannoteInstalled ? (
           <div className="transcription-callout">
             <strong>Reconnaissance des voix à installer</strong>
-            <div>Whisper est prêt, mais Pyannote manque encore. Relance <code>npm run transcription:setup</code> pour ajouter gratuitement le repérage des interlocuteurs.</div>
+            <div>Les dépendances Whisper sont disponibles, mais celles de Pyannote ne sont pas chargées. Relance <code>npm run transcription:setup</code> pour ajouter gratuitement le repérage des interlocuteurs.</div>
           </div>
         ) : null}
 

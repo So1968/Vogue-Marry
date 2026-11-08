@@ -97,6 +97,30 @@ try {
     }
   });
   const context = await browser.newContext();
+  // Le vert représente les prérequis, pas une validation des modèles ou du micro.
+  const healthPage = await context.newPage();
+  let prerequisitesAvailable = true;
+  await healthPage.route("**/api/transcription/health", (route) => route.fulfill({
+    json: { status: "ok", service: "vogue-marry-transcription", localEngineReady: prerequisitesAvailable,
+      localModel: "modele-fictif", highPrecisionReady: false, pyannoteInstalled: false, modelsTested: false, microphoneTested: false }
+  }));
+  await healthPage.route("**/api/transcription/escales", (route) => route.fulfill({ json: { escales: [] } }));
+  await healthPage.goto("http://127.0.0.1:5173/transcription");
+  await healthPage.getByText("Prérequis disponibles · modele-fictif", { exact: true }).waitFor();
+  await healthPage.getByText("Ce contrôle vérifie l’installation, sans tester les modèles ni le microphone.", { exact: false }).waitFor();
+  const dummyAudio = { name: "audio-fictif.webm", mimeType: "audio/webm", buffer: Buffer.from("AUDIO_FICTIF_NON_DECODABLE") };
+  await healthPage.locator('input[type="file"]').setInputFiles(dummyAudio);
+  await healthPage.getByText(dummyAudio.name, { exact: true }).waitFor();
+  assert.equal(await healthPage.getByRole("button", { name: "Transcrire gratuitement" }).isEnabled(), true);
+  prerequisitesAvailable = false;
+  await healthPage.reload();
+  await healthPage.getByText("Configuration à vérifier", { exact: true }).waitFor();
+  await healthPage.getByText("Les dépendances locales sont absentes, incompatibles ou ne se chargent pas.", { exact: false }).waitFor();
+  await healthPage.locator('input[type="file"]').setInputFiles(dummyAudio);
+  await healthPage.getByText(dummyAudio.name, { exact: true }).waitFor();
+  assert.equal(await healthPage.getByRole("button", { name: "Transcrire gratuitement" }).isDisabled(), true);
+  console.log("RESULTAT_SANTE_INTERFACE_FIREFOX", JSON.stringify({ prerequisitesLabel: true, modelsNotClaimedTested: true, missingDependenciesDisableStart: true }));
+  await healthPage.close();
   const page = await context.newPage();
   await page.goto("http://127.0.0.1:5173/");
   await page.locator(".side-nav button").filter({ hasText: "Escales" }).click();

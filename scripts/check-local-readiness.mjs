@@ -6,7 +6,8 @@ import os from "node:os";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { isSupportedNode, probeLocalService } from "./lib/local-readiness.mjs";
+import { isSupportedNode, probeLocalService, localReadinessSummary } from "./lib/local-readiness.mjs";
+import { probePythonDependencies } from "./lib/python-readiness.mjs";
 
 function executable(command) {
   const result = spawnSync(command, ["-version"], { encoding: "utf8", timeout: 5000 });
@@ -26,8 +27,11 @@ const report = {
   ffmpeg: executable("ffmpeg"),
   ffprobe: executable("ffprobe"),
   localPythonEnvironment: fs.existsSync(venv),
+  pythonDependencies: probePythonDependencies(venv),
   dataRootPresent: fs.existsSync(root),
   api,
   transcription
 };
+Object.assign(report, localReadinessSummary(report));
 console.log(JSON.stringify(report, null, 2));
+if (!report.readyForLocalAttempt) process.exitCode = 1;

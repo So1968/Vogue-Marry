@@ -38,6 +38,10 @@ depuis un autre dossier.
 
 ## Critères de réception à consigner sur le poste cible
 
+Pour la remise de novembre, utiliser la
+[fiche guidée de recette Windows](RECETTE_CADEAU_WINDOWS.md) et consigner les
+résultats sur le poste cible.
+
 Ces cases sont une liste de travail, pas une déclaration de validation :
 
 - [ ] Installation depuis une copie propre et le lockfile, avec les prérequis annoncés.

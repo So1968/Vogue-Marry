@@ -105,7 +105,11 @@ try {
     const manifest = verify(backup);
     ensureNestedParent(path.dirname(destination));
     ensureNewDirectory(destination);
-    fs.cpSync(path.join(backup, "donnees"), destination, { recursive: true, force: false, errorOnExist: true });
+    // `destination` is deliberately created above as a new, empty directory.
+    // errorOnExist:true rejects that directory itself before copying its contents.
+    // Keep force:false so any unexpected files that appear during the copy are
+    // never overwritten; the manifest comparison below rejects an incomplete copy.
+    fs.cpSync(path.join(backup, "donnees"), destination, { recursive: true, force: false });
     if (JSON.stringify(inspect(destination)) !== JSON.stringify(manifest.files)) fail("Vérification de restauration échouée.");
     console.log(`Restauration vérifiée : ${manifest.files.length} fichier(s). ${destination}`);
   } else fail("Commandes : backup-next, backup, verify, restore");
